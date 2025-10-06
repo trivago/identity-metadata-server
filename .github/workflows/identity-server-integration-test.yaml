@@ -1,0 +1,304 @@
+name: 'identity-server integration test'
+
+'on':
+  workflow_dispatch:
+    inputs:
+      test_renew:
+        type: 'choice'
+        description: 'Test the renew endpoint'
+        default: 'no'
+        options:
+          - 'no'
+          - 'yes'
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'cmd/identity-server/**'
+      - 'internal/**'
+      - 'tests/**'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  test-mtls:
+    runs-on: ['ubuntu-24.04']
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      CA_ROOT: '${{ github.workspace }}/mtls'
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: 'Checkout'
+        uses: 'actions/checkout@v4.2.2'
+        id: checkout
+
+      - name: 'Setup Workload Identity Provider'
+        id: 'auth'
+        uses: 'google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193' # v2.1.10
+        with:
+          workload_identity_provider: 'projects/866597189115/locations/global/workloadIdentityPools/github/providers/github-actions'
+          service_account: 'github@trv-identity-server-testing.iam.gserviceaccount.com'
+
+      - name: 'Setup Google Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2.1.4'
+        with:
+          project_id: 'trv-dentity-server-testing'
+
+      - name: 'Download and generate certificates'
+        id: 'download-certs'
+        run: |
+          ./tests/gen-certs.sh
+
+          mkdir -p "${CA_ROOT}/server"
+          mkdir -p "${CA_ROOT}/client"
+
+          mv "${CA_ROOT}/generated/client-selfsigned.key" "${CA_ROOT}/client/client-selfsigned.key"
+          mv "${CA_ROOT}/generated/client-selfsigned.cert" "${CA_ROOT}/client/client-selfsigned.cert"
+
+          CA_CERT_URL="$(gcloud privateca roots describe identity-server-ca --project=trv-identity-server-testing --pool=integration-test-ca-pool --location=europe-west1 --format='value(accessUrls.caCertificateAccessUrl)')"
+          curl -sL -o "${CA_ROOT}/server/cacert.pem" "${CA_CERT_URL}"
+
+          cat "${CA_ROOT}/server/cacert.pem" "${CA_ROOT}/generated/cacert.pem" > "${CA_ROOT}/cacert.pem"
+
+          gcloud secrets versions access latest --project="trv-identity-server-testing" --secret="integration-test-server-cert" > "${CA_ROOT}/server/server.cert"
+          gcloud secrets versions access latest --project="trv-identity-server-testing" --secret="integration-test-server-key" > "${CA_ROOT}/server/server.key"
+
+          gcloud secrets versions access latest --project="trv-identity-server-testing" --secret="integration-test-client-key" > "${CA_ROOT}/client/client.key"
+          gcloud secrets versions access 1 --project="trv-identity-server-testing" --secret="integration-test-client-cert" > "${CA_ROOT}/client/client-expired.cert"
+          gcloud secrets versions access latest --project="trv-identity-server-testing" --secret="integration-test-client-cert" > "${CA_ROOT}/client/client.cert"
+          gcloud secrets versions access latest --project="trv-identity-server-testing" --secret="integration-test-client-revoked" > "${CA_ROOT}/client/client-revoked.cert"
+
+          cp "${CA_ROOT}/client/client.key" "${CA_ROOT}/client/client-expired.key"
+          cp "${CA_ROOT}/client/client.key" "${CA_ROOT}/client/client-revoked.key"
+
+      - name: 'Setup golang'
+        uses: 'actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5' # v5.5.0
+        with:
+          go-version: '1.24.3'
+
+      - name: 'Build'
+        run: |
+          go build -tags=jsoniter -ldflags="-s -w" -mod=mod ./cmd/identity-server
+
+      - name: 'Run server'
+        id: 'run-server'
+        run: |
+          ./identity-server \
+            --server.key="${CA_ROOT}/server/server.key" \
+            --tls.certificate="${CA_ROOT}/server/server.cert" \
+            --tls.key="${CA_ROOT}/server/server.key" \
+            --server.issuer='https://identity-server' \
+            --server.hostname='identity-server' \
+            --server.identity='identity-server@trv-identity-server-testing.iam.gserviceaccount.com' \
+            --server.workloadidentity.providername='integration-test' \
+            --server.workloadidentity.poolname='integration-test' \
+            --server.certauthority.project='trv-identity-server-testing' \
+            --server.certauthority.region='europe-west1' \
+            --server.certauthority.poolname='integration-test-ca-pool' \
+            --server.certauthority.name='identity-server-ca' \
+            &> server.log &
+
+          echo $! > server.pid
+          sleep 5
+
+      - name: 'Test jwks.json GET: ok'
+        id: 'jwks'
+        if: steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY=''
+          CURL_CONTENT_JSON=''
+
+          curl_expect 200 'GET' 'https://identity-server:8443/jwks.json'
+
+      - name: 'jwks.json output'
+        if: steps.jwks.outcome == 'success'
+        run: |
+          curl -sLk --resolve 'identity-server:8443:127.0.0.1' 'https://identity-server:8443/jwks.json'
+
+      # Test token retrieval
+      - name: 'Test token GET: no-auth'
+        id: 'token-noauth'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY=''
+          CURL_CONTENT_JSON=''
+
+          curl_expect 401 'GET' 'https://identity-server:8443/token'
+
+      - name: 'Test token GET: empty audience'
+        id: 'token-audience'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client'
+          CURL_CONTENT_JSON='{}'
+
+          curl_expect 400 'GET' 'https://identity-server:8443/token'
+
+      - name: 'Test token GET: client wrong root ca'
+        id: 'token-wrong-ca'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client-selfsigned'
+          CURL_CONTENT_JSON='{"audiences": ["test"]}'
+
+          curl_expect x56 'GET' 'https://identity-server:8443/token'
+
+      - name: 'Test token GET: client expired'
+        id: 'token-expired'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client-expired'
+          CURL_CONTENT_JSON='{"audiences": ["test"]}'
+
+          curl_expect x56 'GET' 'https://identity-server:8443/token'
+
+      - name: 'Test token GET: client revoked'
+        id: 'token-revoked'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client-revoked'
+          CURL_CONTENT_JSON='{"audiences": ["test"]}'
+
+          curl_expect 410 'GET' 'https://identity-server:8443/token'
+
+      - name: 'Test token GET: ok'
+        id: 'token'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client'
+          CURL_CONTENT_JSON='{"audiences": ["test"], "lifetime": "10m"}'
+
+          curl_expect 200 'GET' 'https://identity-server:8443/token'
+
+      - name: 'Test token GET: ok, defaults'
+        id: 'token-defaults'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client'
+          CURL_CONTENT_JSON='{"audiences": ["test"]}'
+
+          curl_expect 200 'GET' 'https://identity-server:8443/token'
+
+      # Test identity retrieval
+      - name: 'Test identity GET: no-auth'
+        id: 'identity-noauth'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY=''
+          CURL_CONTENT_JSON=''
+
+          curl_expect 401 'GET' 'https://identity-server:8443/identity'
+
+      - name: 'Test identity GET: client wrong root ca'
+        id: 'identity-wrong-ca'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client-selfsigned'
+          CURL_CONTENT_JSON=''
+
+          curl_expect x56 'GET' 'https://identity-server:8443/identity'
+
+      - name: 'Test identity GET: client expired'
+        id: 'identity-expired'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client-expired'
+          CURL_CONTENT_JSON=''
+
+          curl_expect x56 'GET' 'https://identity-server:8443/identity'
+
+      - name: 'Test identity GET: client revoked'
+        id: 'identity-revoked'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client-revoked'
+          CURL_CONTENT_JSON=''
+
+          curl_expect 410 'GET' 'https://identity-server:8443/identity'
+
+      - name: 'Test identity GET: ok'
+        id: 'identity'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client'
+          CURL_CONTENT_JSON=''
+
+          curl_expect 200 'GET' 'https://identity-server:8443/identity'
+
+      # The test requires the integration-test server to have certificate
+      # creation rights for the integration-test-ca-pool
+      - name: 'Test renew POST: ok'
+        id: 'renew'
+        if: always() && inputs.test_renew == 'yes' && steps.run-server.outcome == 'success'
+        run: |
+          source 'tests/integrationtest-utils.sh'
+
+          CURL_IDENTITY='client'
+          CERT_TEXT=$(openssl x509 -text -noout -in "${CA_ROOT}/client/${CURL_IDENTITY}.cert")
+          NODE_NAME=$(echo "${CERT_TEXT}" | grep -E 'Subject:.+CN' | sed -E 's/.+CN[\t =]+([a-zA-Z0-9-]+)/\1/')
+          SERVICE_ACCOUNT=$(echo "${CERT_TEXT}" | grep -E 'email:' | sed -E 's/.+email:([a-zA-Z0-9@._-]+).+/\1/')
+          NODE_IPS_CSV=$(echo "${CERT_TEXT}" | grep -Eo 'IP Address:[^,]+' | sed -nE 's/IP Address:([0-9a-fA-F:.]+)/\1/p' | paste -sd',IP:')
+
+          echo "Generating a CSR for ${NODE_NAME} bound to ${SERVICE_ACCOUNT}"
+          echo "IP addresses: ${NODE_IPS_CSV}"
+          echo
+
+          openssl req -new \
+            -nodes \
+            -key "${CA_ROOT}/client/${CURL_IDENTITY}.key" \
+            -out "${CA_ROOT}/client-renew.csr" \
+            -subj "/CN=${NODE_NAME}" \
+            -addext "subjectAltName=DNS:${NODE_NAME},IP:${NODE_IPS_CSV//,/,IP:},email:${SERVICE_ACCOUNT}" \
+            -addext "keyUsage=digitalSignature" \
+            -addext "extendedKeyUsage=clientAuth"
+
+          CURL_CONTENT_TYPE='application/x-pem-file'
+          CURL_CONTENT_RAW=$(cat "${CA_ROOT}/client-renew.csr")
+
+          echo "Calling renew endpoint"
+          echo
+
+          curl_expect 200 'POST' 'https://identity-server:8443/renew'
+
+      - name: 'stop server'
+        if: always() && steps.run-server.outcome == 'success'
+        run: |
+          kill "$(cat server.pid)"
+
+      - name: 'upload server log'
+        if: always() && steps.run-server.outcome == 'success'
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # v4.6.2
+        with:
+          name: 'server.log'
+          path: 'server.log'

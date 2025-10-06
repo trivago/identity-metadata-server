@@ -1,0 +1,57 @@
+{
+  "include-component-in-tag": true,
+  "include-v-in-tag": false,
+  "separate-pull-requests": true,
+  "tag-separator": "-",
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "Features",
+      "hidden": false
+    },
+    {
+      "type": "fix",
+      "section": "Bug Fixes",
+      "hidden": false
+    },
+    {
+      "type": "refactor",
+      "section": "Refactorings",
+      "hidden": false
+    },
+    {
+      "type": "security",
+      "section": "Security fixes",
+      "hidden": false
+    },
+    {
+      "type": "chore",
+      "section": "Miscellaneous",
+      "hidden": false
+    }
+  ],
+  "exclude-paths": [
+    "docs",
+    "google-cloud",
+    "kubernetes",
+    "scripts",
+    "tests"
+  ],
+  "packages": {
+    "cmd/identity-server": {
+      "package-name": "identity-server",
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "go"
+    },
+    "cmd/metadata-server": {
+      "package-name": "metadata-server",
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "go"
+    },
+    "cmd/metadata-iptables-init": {
+      "package-name": "metadata-iptables-init",
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "go"
+    }
+  }
+}

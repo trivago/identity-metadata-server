@@ -1,0 +1,46 @@
+name: "Pull Request Labeler"
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  path_labeler:
+    runs-on: ['ubuntu-24.04']
+    permissions:
+      contents: 'read'
+      pull-requests: 'write'
+
+    steps:
+    - name: 'assign path based labels'
+      uses: 'actions/labeler@v5'
+
+  commit_labeler:
+    runs-on: ['ubuntu-24.04']
+    permissions:
+      contents: 'read'
+      pull-requests: 'write'
+
+    steps:
+    - name: 'assign commit based labels'
+      uses: mauroalderete/action-assign-labels@v1
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        maintain-labels-not-matched: true
+        apply-changes: true
+        conventional-commits: |
+          conventional-commits:
+            - type: 'bug'
+              nouns: ['FIX', 'Fix', 'fix']
+              labels: ['🐞 bug']
+            - type: 'feature'
+              nouns: ['FEAT', 'Feat', 'feat']
+              labels: ['⭐️ feature']
+            - type: 'chore'
+              nouns: ['CHORE', 'Chore', 'chore']
+              labels: ['🧹 chore']
+            - type: 'refactor'
+              nouns: ['REFACTOR', 'Refactor', 'refactor']
+              labels: ['🛠️ refactoring']
+            - type: 'security'
+              nouns: ['SECURITY', 'Security', 'security']
+              labels: ['🔓 security']

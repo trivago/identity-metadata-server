@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: 'host-metadata'
+  namespace: '{{ $.Release.Namespace }}'
+  labels:
+    app.kubernetes.io/instance: metadata-server
+    app.kubernetes.io/name: metadata-server
+spec:
+  jobName: 'host-metadata'
+  metricsPath: '/metrics'
+  honorLabels: true
+  enableCompression: true
+  relabelings:
+    - sourceLabels: [__address__]
+      targetLabel: __address__
+      action: replace
+      regex: '([^:]+)(?::([0-9]+))?'
+      replacement: '$1:8080'
+    - sourceLabels: [__meta_kubernetes_node_annotation_cluster_x_k8s_io_cluster_name]
+      targetLabel: 'cluster'
+      regex: '([^-]+)-[^-]+-[^-]+-[a-z0-9]+'
+      replacement: '$1'
+    - sourceLabels: [__meta_kubernetes_node_annotation_cluster_x_k8s_io_cluster_name]
+      targetLabel: 'tier'
+      regex: '[^-]+-([^-]+)-[^-]+-[a-z0-9]+'
+      replacement: '$1'
+  kubernetesSDConfigs:
+    - role: 'Node'

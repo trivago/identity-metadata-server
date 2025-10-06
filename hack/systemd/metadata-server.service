@@ -1,0 +1,35 @@
+[Unit]
+Description=Metadata Server
+After=network.target network-online.target identity-server.service
+
+[Service]
+ExecStart=/opt/metadata-server/metadata-server \
+  --mode 'host' \
+  --poolname 'integration-test' \
+  --providername 'integration-test' \
+  --host.clientcert 'public/client.cert' \
+  --host.clientkey 'private/client.key' \
+  --cache.tokenminlifetime '10m' \
+  --token.lifetime.access '20m' \
+  --token.lifetime.identity '20m'
+
+Restart=on-failure
+RestartSec=3
+
+User=metadata-server
+Group=metadata-server
+WorkingDirectory=/opt/metadata-server
+
+RestrictSUIDSGID=true
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+SystemCallArchitectures=native
+LockPersonality=true
+RestrictRealtime=yes
+
+[Install]
+WantedBy=multi-user.target

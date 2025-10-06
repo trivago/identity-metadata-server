@@ -1,0 +1,52 @@
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.tgz
+.DS_Store
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Helm related
+Chart.lock
+
+# Go workspace file
+go.work
+go.work.sum
+
+# env files
+.env
+.envrc
+.direnv
+
+# terraform
+.terraform
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# binaries
+/identity-server
+/metadata-server
+/*.coverage
+
+# certificate related files
+*.pem
+*.cert
+*.key
+*.csr
+*.crt
+mtls/
+bin/*
