@@ -1,0 +1,34 @@
+image:
+  name: 'metadata-server'
+  # The container image registry hosting the metadata server image
+  registry: 'ghcr.io/trivago'
+  # The container image tag to use for the metadata server
+  tag: '3.6.4'
+
+# Host port where the metadata server will be exposed
+port: 18081
+
+env:
+  # Name of the GCP project holding the workload identity pool
+  AUTH_PROJECTID: ''
+  # Number of the GCP project holding the workload identity pool
+  AUTH_PROJECTNUMBER: ''
+  # Name of the workload identity pool managing this kubernetes cluster
+  AUTH_POOLNAME: ''
+  # Name of the workload identity provider managing this kubernetes cluster
+  AUTH_PROVIDERNAME: ''
+
+resources:
+  limits:
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+iptablesInit:
+  image:
+    name: 'metadata-iptables-init'
+    # The container image registry hosting the iptables init image
+    registry: 'ghcr.io/trivago'
+    # The container image tag to use for the iptables init
+    tag: '3.1.0'

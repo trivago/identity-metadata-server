@@ -1,0 +1,117 @@
+apiVersion: 'apps/v1'
+kind: 'DaemonSet'
+metadata:
+  labels:
+    app.kubernetes.io/instance: 'metadata-server'
+    app.kubernetes.io/name: 'metadata-server'
+  name: 'metadata-server'
+  namespace: {{ $.Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: 'metadata-server'
+      app.kubernetes.io/name: 'metadata-server'
+
+  revisionHistoryLimit: 2
+  updateStrategy:
+    type: 'RollingUpdate'
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
+      labels:
+        app.kubernetes.io/instance: 'metadata-server'
+        app.kubernetes.io/name: 'metadata-server'
+        sidecar.istio.io/inject: 'false'
+    spec:
+      restartPolicy: 'Always'
+      serviceAccountName: 'metadata-server'
+      dnsPolicy: 'ClusterFirstWithHostNet'
+      hostNetwork: true
+
+      containers:
+        - name: 'metadata-server'
+          image: '{{ $.Values.image.registry }}/{{ $.Values.image.name }}:{{ $.Values.image.tag }}'
+          imagePullPolicy: 'IfNotPresent'
+          env:
+            - name: 'AUTH_MODE'
+              value: 'kubernetes'
+            - name: 'AUTH_PORT'
+              value: '{{ $.Values.port }}'
+          {{- range $key, $value := $.Values.env }}
+            - name: '{{ $key }}'
+              value: '{{ $value }}'
+          {{- end }}
+
+          ports:
+            - containerPort: {{ $.Values.port }}
+              name: 'http-main'
+              protocol: 'TCP'
+
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsGroup: 65534
+            runAsNonRoot: true
+            runAsUser: 65534
+
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 'http-main'
+              scheme: 'HTTP'
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readyz
+              port: 'http-main'
+              scheme: 'HTTP'
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 5
+
+      initContainers:
+        - name: 'metadata-server-init'
+          image: '{{ $.Values.iptablesInit.image.registry }}/{{ $.Values.iptablesInit.image.name }}:{{ $.Values.iptablesInit.image.tag }}'
+          imagePullPolicy: 'IfNotPresent'
+
+          env:
+            - name: 'PORT'
+              value: '{{ $.Values.port }}'
+            - name: 'METADATA_HOST_IP'
+              valueFrom:
+                fieldRef:
+                  fieldPath: 'status.hostIP'
+
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_ADMIN
+                - NET_RAW
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsGroup: 0
+            runAsNonRoot: false
+            runAsUser: 0

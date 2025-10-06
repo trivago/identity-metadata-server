@@ -1,0 +1,41 @@
+[Unit]
+Description=Identity Server
+After=network.target network-online.target
+
+[Service]
+ExecStart=/opt/identity-server/identity-server \
+    --port '443' \
+    --server.key '/opt/identity-server/private/server.key' \
+    --tls.key '/opt/identity-server/private/server.key' \
+    --tls.certificate '/opt/identity-server/private/server.cert' \
+    --server.issuer='https://identity-server' \
+    --server.hostname='identity-server' \
+    --server.identity='identity-server@trv-identity-server-testing.iam.gserviceaccount.com' \
+    --server.workloadidentity.providername='integration-test' \
+    --server.workloadidentity.poolname='integration-test' \
+    --server.certauthority.project='trv-identity-server-testing' \
+    --server.certauthority.region='europe-west1' \
+    --server.certauthority.poolname='integration-test-ca-pool' \
+    --server.certauthority.name='identity-server-ca'
+
+Restart=on-failure
+RestartSec=3
+
+User=identity-server
+Group=identity-server
+WorkingDirectory=/opt/identity-server
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+SystemCallArchitectures=native
+LockPersonality=true
+RestrictRealtime=yes
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

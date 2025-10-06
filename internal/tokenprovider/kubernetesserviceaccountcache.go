@@ -1,0 +1,141 @@
+package tokenprovider
+
+import (
+	"context"
+	"identity-metadata-server/internal/shared"
+	"sync"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/rs/zerolog/log"
+	"github.com/trivago/go-kubernetes/v4"
+)
+
+// KubernetesServiceAccountCache holds service account data already resolved from the kubernetes API.
+// This avoids having to query the kubernetes API (multiple times) for every request.
+type KubernetesServiceAccountCache struct {
+	lock        *sync.Mutex
+	data        map[string]kubernetesServiceAccountInfo
+	ttl         time.Duration
+	k8s         *kubernetes.Client
+	hitMetric   prometheus.Counter
+	missMetric  prometheus.Counter
+	kubeletHost string
+}
+
+// NewKubernetesServiceAccountCache creates a new service account cache with a given TTL
+// for times stored inside the cache.
+func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost string, ttl time.Duration) *KubernetesServiceAccountCache {
+	hitMetric := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace:   "metadata_server",
+		Subsystem:   "serviceaccount_cache",
+		Name:        "hits_total",
+		Help:        "Total number of hits to the token cache.",
+		ConstLabels: map[string]string{},
+	})
+	missMetric := prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace:   "metadata_server",
+		Subsystem:   "serviceaccount_cache",
+		Name:        "misses_total",
+		Help:        "Total number of misses to the token cache.",
+		ConstLabels: map[string]string{},
+	})
+
+	if err := shared.RegisterCollectorOrUseExisting(&hitMetric); err != nil {
+		log.Warn().Err(err).Msg("Failed to register service account cache hit metric, metrics will not be available")
+	}
+	if err := shared.RegisterCollectorOrUseExisting(&missMetric); err != nil {
+		log.Warn().Err(err).Msg("Failed to register service account cache miss metric, metrics will not be available")
+	}
+
+	return &KubernetesServiceAccountCache{
+		lock:        &sync.Mutex{},
+		data:        make(map[string]kubernetesServiceAccountInfo),
+		ttl:         ttl,
+		k8s:         client,
+		hitMetric:   hitMetric,
+		missMetric:  missMetric,
+		kubeletHost: kubeletHost,
+	}
+}
+
+// Get returns the service account information for the given IP.
+// If the service account is not known, it will be resolved from the
+// kubernetes API.
+// IPs will be re-resolved after serviceAccountCacheTTL has passed.
+// This function is thread safe.
+func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) kubernetesServiceAccountInfo {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	info, isKnown := c.data[podIP]
+
+	if isKnown {
+		// TODO: This is a bit dangerous for very shortlived pods.
+		//       As far as I know, kubernetes pod IPs take some time to be recycled,
+		//       not only because pods take some time to shot down/spin up, but this
+		//       is not guaranteed.
+		//       Because of this, the default TTL is quite short, so we essentially
+		//       only cache the service account for requests that are coming in short
+		//       succession.
+		if time.Since(info.firstSeen) < c.ttl {
+			c.hitMetric.Inc()
+			return info
+		}
+		delete(c.data, podIP)
+	}
+
+	c.missMetric.Inc()
+
+	var (
+		pod kubernetes.NamedObject
+		err error
+	)
+
+	// If kubeletHost is set, we will try to get the pod from the kubelet API.
+	// Otherwise, we will try to get the pod from the control plane API.
+	if len(c.kubeletHost) > 0 {
+		pod, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 3, ctx)
+	} else {
+		pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 3, ctx)
+	}
+
+	if err != nil || pod == nil {
+		log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pod for IP")
+		return kubernetesServiceAccountInfo{}
+	}
+
+	// Retrieve service account name from pod. If not found, default to "default", which
+	// is the default kubernetes behavior.
+	serviceAccountName, err := pod.GetString(kubernetes.Path{"spec", "serviceAccountName"})
+	if err != nil {
+		log.Warn().Err(err).Str("pod", pod.GetName()).Str("namespace", pod.GetNamespace()).Msg("No service account set")
+		serviceAccountName = "default"
+	}
+
+	ksa := kubernetesServiceAccountInfo{
+		firstSeen: time.Now(),
+		owner:     pod,
+		namespace: pod.GetNamespace(),
+		name:      serviceAccountName,
+	}
+
+	if serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace); err != nil {
+		log.Error().Err(err).
+			Str("pod", pod.GetName()).
+			Str("serviceAccount", ksa.name).
+			Str("namespace", ksa.namespace).
+			Msg("Failed to get service account for pod")
+	} else {
+		ksa.boundGSA, err = serviceAccount.GetAnnotation("iam.gke.io/gcp-service-account")
+		if err != nil || ksa.boundGSA == "" {
+			log.Error().Err(err).
+				Str("serviceAccount", ksa.name).
+				Str("namespace", ksa.namespace).
+				Msg("Failed to get gcp service account annotation")
+		}
+	}
+
+	c.data[podIP] = ksa
+	return ksa
+}

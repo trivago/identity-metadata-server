@@ -1,0 +1,11 @@
+'📖 documentation':
+  - changed-files:
+      - any-glob-to-any-file: docs/**
+
+'🔀 metadata-server':
+  - changed-files:
+      - any-glob-to-any-file: cmd/metadata-server/**
+
+'🛂 identity-server':
+  - changed-files:
+      - any-glob-to-any-file: cmd/identity-server/**

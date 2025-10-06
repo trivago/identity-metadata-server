@@ -1,0 +1,15 @@
+apiVersion: 'monitoring.coreos.com/v1'
+kind: 'PodMonitor'
+metadata:
+  name: 'metadata-server'
+  namespace: '{{ $.Release.Namespace }}'
+  labels:
+    app.kubernetes.io/instance: 'metadata-server'
+    app.kubernetes.io/name: 'metadata-server'
+spec:
+  podMetricsEndpoints:
+    - path: '/metrics'
+      port: 'http-main'
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: 'metadata-server'

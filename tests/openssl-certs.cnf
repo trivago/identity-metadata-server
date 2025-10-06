@@ -1,0 +1,23 @@
+# This is a minimal openssl config used for creating client or server certificates
+
+[ req ]
+distinguished_name = req_dn
+x509_extensions    = v3_ext
+
+[ req_dn ]
+commonName                     = localhost
+countryName_default            = DE
+stateOrProvinceName_default    = NRW
+localityName_default           = Dusseldorf
+organizationName_default       = trivago
+organizationalUnitName_default = SRE
+emailAddress_default           = integration.test@trivago.com
+
+[ v3_ext ]
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName   = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+IP.2 = ::1

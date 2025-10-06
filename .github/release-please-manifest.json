@@ -1,0 +1,5 @@
+{
+  "cmd/identity-server": "2.3.0",
+  "cmd/metadata-server": "3.6.4",
+  "cmd/metadata-iptables-init": "3.1.0"
+}

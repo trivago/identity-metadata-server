@@ -1,0 +1,56 @@
+name: 'identity-server unit tests'
+
+'on':
+  workflow_dispatch: {}
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'cmd/identity-server/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  test-identity-server:
+    runs-on: ['ubuntu-24.04']
+    defaults:
+      run:
+        shell: 'bash'
+    steps:
+      - name: 'setup golang'
+        uses: 'actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5' # v5.5.0
+        with:
+          go-version: '1.24.3'
+
+      - name: 'checkout'
+        uses: 'actions/checkout@v4.2.2'
+        id: checkout
+
+      - name: 'run tests'
+        run: |
+          go test -tags=jsoniter -ldflags="-s -w" -mod=mod -cover -coverprofile=coverage.txt -v ./cmd/identity-server/...
+
+      - name: Archive code coverage results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: 'identity-server-coverage'
+          path: 'coverage.txt'
+
+  code-coverage:
+    name: 'Code coverage report'
+    needs: 'test-identity-server'
+    runs-on: ['ubuntu-24.04']
+    if: github.event_name == 'pull_request'
+
+    permissions:
+      contents: 'read'
+      actions: 'read'
+      pull-requests: 'write'
+
+    steps:
+      - uses: 'fgrosse/go-coverage-report@v1.2.0'
+        env:
+          GITHUB_BASELINE_WORKFLOW: ${{ github.workflow }}
+        with:
+          coverage-artifact-name: 'identity-server-coverage'
+          coverage-file-name: 'coverage.txt'
