@@ -162,7 +162,7 @@ func (tp *HostTokenProvider) GetIdentityForIP(ctx context.Context, ip string) So
 		return hostIdentity{}
 	}
 
-	defer rsp.Body.Close()
+	defer func() { _ = rsp.Body.Close() }()
 	body, _ := io.ReadAll(rsp.Body)
 
 	if rsp.StatusCode != http.StatusOK {
@@ -218,7 +218,7 @@ func (tp *HostTokenProvider) GetTokenRequestToken(ctx context.Context, srcIdenti
 			Msg("Failed to get access token")
 		return nil, err
 	}
-	defer tokenRequestTokenResponse.Body.Close()
+	defer func() { _ = tokenRequestTokenResponse.Body.Close() }()
 
 	// If the response is not 200, we log the response and return nil
 	if tokenRequestTokenResponse.StatusCode != http.StatusOK {
@@ -269,7 +269,7 @@ func (tp *HostTokenProvider) getSignedRequestToken(ctx context.Context, requestT
 		return nil, shared.WrapErrorWithStatus(err, http.StatusInternalServerError)
 	}
 
-	defer oidcTokenRsp.Body.Close()
+	defer func() { _ = oidcTokenRsp.Body.Close() }()
 	oidcTokenBody, err := io.ReadAll(oidcTokenRsp.Body)
 
 	if err != nil {
@@ -328,7 +328,7 @@ func (tp *HostTokenProvider) TryRefreshCertificate() error {
 
 	remaining := time.Until(oldCert.NotAfter)
 	if remaining <= 0 {
-		return fmt.Errorf("client certificate already expired %s ago. A manual refresh is needed.", -remaining)
+		return fmt.Errorf("client certificate already expired %s ago. A manual refresh is needed", -remaining)
 	}
 
 	if remaining > tp.certMinLifetime {
@@ -386,7 +386,7 @@ func (tp *HostTokenProvider) TryRefreshCertificate() error {
 		return errors.Join(err, errors.New("failed to get new certificate"))
 	}
 
-	defer rsp.Body.Close()
+	defer func() { _ = rsp.Body.Close() }()
 	if rsp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(rsp.Body)
 		return errors.Join(errors.New(string(body)), errors.New("failed to get new certificate from identity server"))

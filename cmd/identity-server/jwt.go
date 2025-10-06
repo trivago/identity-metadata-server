@@ -49,16 +49,16 @@ func newSigningKey(setKey jwk.Key, nativeKey interface{}, method jwt.SigningMeth
 	keyId := viper.GetString("server.keyName")
 
 	// Set required fields
-	sk.setKey.Set(jwk.KeyUsageKey, "sig")
-	sk.setKey.Set(jwk.KeyIDKey, keyId)
+	_ = sk.setKey.Set(jwk.KeyUsageKey, "sig")
+	_ = sk.setKey.Set(jwk.KeyIDKey, keyId)
 
 	// Remove unsupported fields
-	sk.setKey.Remove("d")
-	sk.setKey.Remove("dp")
-	sk.setKey.Remove("dq")
-	sk.setKey.Remove("p")
-	sk.setKey.Remove("q")
-	sk.setKey.Remove("qi")
+	_ = sk.setKey.Remove("d")
+	_ = sk.setKey.Remove("dp")
+	_ = sk.setKey.Remove("dq")
+	_ = sk.setKey.Remove("p")
+	_ = sk.setKey.Remove("q")
+	_ = sk.setKey.Remove("qi")
 
 	return &sk
 }
@@ -86,7 +86,7 @@ func readJwkKeyFromPKCS8(data []byte) (*signingKey, bool, error) {
 		return newSigningKey(setKey, nativeKey, jwt.SigningMethodES256), true, nil
 
 	default:
-		return nil, true, fmt.Errorf("Unsupported key type")
+		return nil, true, fmt.Errorf("unsupported key type")
 	}
 }
 
@@ -131,7 +131,7 @@ func initJWKS() error {
 
 	block, _ := pem.Decode(rawKey)
 	if block == nil || len(block.Bytes) == 0 {
-		return fmt.Errorf("Failed to decode PEM data from file %s", keyPath)
+		return fmt.Errorf("failed to decode PEM data from file %s", keyPath)
 	}
 
 	parser := []func([]byte) (*signingKey, bool, error){
@@ -157,7 +157,7 @@ func initJWKS() error {
 		return nil
 	}
 
-	return fmt.Errorf("Failed to parse private key: Unsupported format")
+	return fmt.Errorf("failed to parse private key: unsupported format")
 }
 
 func buildAndSignJWT(claims CustomClaims) (string, error) {

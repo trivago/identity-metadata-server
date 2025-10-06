@@ -44,14 +44,14 @@ var (
 func (p *KubeletPodInfo) NamedObject() kubernetes.NamedObject {
 	obj := kubernetes.NewNamedObject(p.Metadata.Name)
 
-	obj.SetNamespace(p.Metadata.Namespace)
-	obj.Set(kubernetes.Path{"kind"}, "Pod")
-	obj.Set(kubernetes.Path{"apiVersion"}, "v1")
-	obj.Set(kubernetes.Path{"metadata", "uid"}, p.Metadata.UID)
-	obj.Set(kubernetes.Path{"spec", "serviceAccountName"}, p.Spec.ServiceAccountName)
-	obj.Set(kubernetes.Path{"status", "podIP"}, p.Status.PodIP)
-	obj.Set(kubernetes.Path{"status", "hostIP"}, p.Status.HostIP)
-	obj.Set(kubernetes.Path{"status", "phase"}, p.Status.Phase)
+	_ = obj.SetNamespace(p.Metadata.Namespace)
+	_ = obj.Set(kubernetes.Path{"kind"}, "Pod")
+	_ = obj.Set(kubernetes.Path{"apiVersion"}, "v1")
+	_ = obj.Set(kubernetes.Path{"metadata", "uid"}, p.Metadata.UID)
+	_ = obj.Set(kubernetes.Path{"spec", "serviceAccountName"}, p.Spec.ServiceAccountName)
+	_ = obj.Set(kubernetes.Path{"status", "podIP"}, p.Status.PodIP)
+	_ = obj.Set(kubernetes.Path{"status", "hostIP"}, p.Status.HostIP)
+	_ = obj.Set(kubernetes.Path{"status", "phase"}, p.Status.Phase)
 
 	return obj
 }
@@ -132,7 +132,7 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 
 		if len(pods.Items) == 0 {
 			// As this process is running as a pod, something must be wrong with the kubelet API.
-			return nil, fmt.Errorf("Failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
+			return nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
 		}
 
 		candidates := make([]*KubeletPodInfo, 0, len(pods.Items))
@@ -183,7 +183,7 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 		}
 	}
 
-	return nil, fmt.Errorf("No pod found for IP %s after %d tries", podIP, retries)
+	return nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
 }
 
 // GetPodByIPviaControlPlane retrieves the pod object for a given pod IP.
@@ -227,5 +227,5 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 		}
 	}
 
-	return nil, fmt.Errorf("No pod found for IP %s after %d tries", podIP, retries)
+	return nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
 }

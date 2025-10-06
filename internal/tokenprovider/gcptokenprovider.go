@@ -57,7 +57,7 @@ func (tp *GcpTokenProvider) GetAccessToken(ctx context.Context, tokenRequestToke
 			Msg("Failed to call iam access token endpoint")
 		return nil, shared.WrapErrorWithStatus(err, http.StatusInternalServerError)
 	}
-	defer accessTokenResponse.Body.Close()
+	defer func() { _ = accessTokenResponse.Body.Close() }()
 
 	// If the response is not 200, we log the response and return nil
 	if accessTokenResponse.StatusCode != http.StatusOK {
@@ -125,7 +125,7 @@ func (tp *GcpTokenProvider) GetIdentityToken(ctx context.Context, tokenRequestTo
 			Msg("Failed to call iam identity token endpoint")
 		return nil, shared.WrapErrorWithStatus(err, http.StatusInternalServerError)
 	}
-	defer identityTokenResponse.Body.Close()
+	defer func() { _ = identityTokenResponse.Body.Close() }()
 
 	// If the response is not 200, we log the response and return nil
 	if identityTokenResponse.StatusCode != http.StatusOK {
@@ -188,6 +188,6 @@ func (tp *GcpTokenProvider) trackApiCall(endpoint, path string, statusCode int, 
 		return
 	}
 
-	tp.metrics.TrackDuration(endpoint, path, time.Since(requestStart))
-	tp.metrics.TrackRequest(endpoint, path, statusCode)
+	_ = tp.metrics.TrackDuration(endpoint, path, time.Since(requestStart))
+	_ = tp.metrics.TrackRequest(endpoint, path, statusCode)
 }

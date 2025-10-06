@@ -6,7 +6,7 @@ Creates a service account for a machine to bind to.
 
 ## generate-certs
 
-Generates a client-certificate that is used to identify a machine. 
+Generates a client-certificate that is used to identify a machine.
 This requires a workload-identity pool and certificate authority
 being set up in Google Cloud.
 

@@ -85,7 +85,7 @@ func (tp *KubernetesTokenProvider) GetTokenRequestToken(ctx context.Context, src
 			Msg("Failed to get access token")
 		return nil, err
 	}
-	defer tokenRequestTokenResponse.Body.Close()
+	defer func() { _ = tokenRequestTokenResponse.Body.Close() }()
 
 	// If the response is not 200, we log the response and return nil
 	if tokenRequestTokenResponse.StatusCode != http.StatusOK {

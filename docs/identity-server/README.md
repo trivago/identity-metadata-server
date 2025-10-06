@@ -129,7 +129,7 @@ CA_ROOT='mtls'
 
 curl -vvv -X GET -H 'Content-Type: application/json' \
     --resolve 'identity-server:8443:127.0.0.1' \
-    --cert "${CA_ROOT}/generated/client.cert" \ 
+    --cert "${CA_ROOT}/generated/client.cert" \
     --key "${CA_ROOT}/generated/client.key"  \
     --cacert "${CA_ROOT}/cacert.pem"  \
     -d "{\"audience\": \"test\", \"lifetime\": \"10m\"}" \

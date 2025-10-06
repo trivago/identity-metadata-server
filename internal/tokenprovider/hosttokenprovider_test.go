@@ -46,7 +46,7 @@ func (t *hostProviderTestContext) Add(name string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	t.path[name] = tmpFile.Name()
 
@@ -71,7 +71,7 @@ func NewMockIdentityServer(testContext *hostProviderTestContext) (*httptest.Serv
 	}
 
 	caKeyPEM := new(bytes.Buffer)
-	pem.Encode(caKeyPEM, &pem.Block{
+	_ = pem.Encode(caKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(testContext.caKey),
 	})
@@ -104,7 +104,7 @@ func NewMockIdentityServer(testContext *hostProviderTestContext) (*httptest.Serv
 	}
 
 	caPEM := new(bytes.Buffer)
-	pem.Encode(caPEM, &pem.Block{
+	_ = pem.Encode(caPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: caDER,
 	})
@@ -144,13 +144,13 @@ func NewMockIdentityServer(testContext *hostProviderTestContext) (*httptest.Serv
 	}
 
 	serverCertPEM := new(bytes.Buffer)
-	pem.Encode(serverCertPEM, &pem.Block{
+	_ = pem.Encode(serverCertPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: serverCertDER,
 	})
 
 	serverKeyPEM := new(bytes.Buffer)
-	pem.Encode(serverKeyPEM, &pem.Block{
+	_ = pem.Encode(serverKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(serverKey),
 	})
@@ -235,7 +235,7 @@ func NewClientCertFromCSR(csrPEM []byte, ca *x509.Certificate, caKey *rsa.Privat
 	}
 
 	clientCertPEM := new(bytes.Buffer)
-	pem.Encode(clientCertPEM, &pem.Block{
+	_ = pem.Encode(clientCertPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: clientCertDER,
 	})
@@ -250,7 +250,7 @@ func NewMockClientCert(testContext *hostProviderTestContext) (err error) {
 	}
 
 	clientKeyPEM := new(bytes.Buffer)
-	pem.Encode(clientKeyPEM, &pem.Block{
+	_ = pem.Encode(clientKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(clientKey),
 	})
@@ -283,7 +283,7 @@ func NewMockClientCert(testContext *hostProviderTestContext) (err error) {
 	}
 
 	clientCertPEM := new(bytes.Buffer)
-	pem.Encode(clientCertPEM, &pem.Block{
+	_ = pem.Encode(clientCertPEM, &pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: clientCertDER,
 	})
@@ -344,7 +344,8 @@ func TestHostTokenProviderRenewFileHandling(t *testing.T) {
 	// Make sure we've passed the minimum lifetime again
 	time.Sleep(2 * time.Second)
 
-	provider.TryRefreshCertificate()
+	err = provider.TryRefreshCertificate()
+	assert.NoError(err)
 
 	newCertFileName, err := os.Readlink(files.path[fileIdClientCert])
 	assert.NoError(err)
@@ -391,7 +392,9 @@ func TestHostTokenProviderRenew(t *testing.T) {
 
 	// Make sure we've passed the minimum lifetime
 	time.Sleep(2 * time.Second)
-	provider.TryRefreshCertificate()
+	err = provider.TryRefreshCertificate()
+
+	assert.NoError(err)
 
 	// Check if the new cert is being used
 	// The mock server will return the new cert serial number

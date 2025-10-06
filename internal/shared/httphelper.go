@@ -143,7 +143,7 @@ func HttpGETJson[T any](address string, body []byte, header map[string]string, c
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		rspData, err := ReadBodyWithLimit(resp, 32*1024)
@@ -178,7 +178,7 @@ func HttpPOSTJson[T any](address string, body []byte, header map[string]string, 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		rspData, _ := ReadBodyWithLimit(resp, 32*1024)

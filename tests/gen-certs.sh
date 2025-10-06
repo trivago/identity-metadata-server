@@ -57,4 +57,3 @@ generate_cert() {
 echo
 echo "Generate self-signed client certificate"
 generate_cert "client-selfsigned"
-

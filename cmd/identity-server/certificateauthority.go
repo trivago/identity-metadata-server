@@ -114,7 +114,7 @@ func GetRevokedCertificates(project, region, poolName, name string, ctx context.
 		}
 
 		body, _ := io.ReadAll(rsp.Body)
-		rsp.Body.Close()
+		_ = rsp.Body.Close()
 
 		if rsp.StatusCode != http.StatusOK {
 			err := fmt.Errorf("%d: %s", rsp.StatusCode, string(body))

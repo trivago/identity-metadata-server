@@ -27,4 +27,3 @@ spec:
       replacement: '$1'
   kubernetesSDConfigs:
     - role: 'Node'
-
