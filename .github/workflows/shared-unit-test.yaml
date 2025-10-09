@@ -3,13 +3,14 @@ name: 'shared unit tests'
 'on':
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
 
 jobs:
   test-shared:
+    if: |
+      contains(github.event.pull_request.changed_files, 'internal/') ||
+      contains(github.event.pull_request.changed_files, 'go.mod') ||
+      contains(github.event.pull_request.changed_files, 'go.sum')
+
     runs-on: ['ubuntu-24.04']
     defaults:
       run:

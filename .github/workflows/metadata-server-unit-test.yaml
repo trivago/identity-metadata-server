@@ -1,17 +1,17 @@
 name: 'metadata-server unit tests'
 
 'on':
-  workflow_dispatch: {}
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - 'cmd/metadata-server/**'
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
 
 jobs:
   test-metadata-server:
+    if: |
+      contains(github.event.pull_request.changed_files, 'cmd/metadata-server/') ||
+      contains(github.event.pull_request.changed_files, 'internal/') ||
+      contains(github.event.pull_request.changed_files, 'go.mod') ||
+      contains(github.event.pull_request.changed_files, 'go.sum')
+
     runs-on: ['ubuntu-24.04']
     defaults:
       run:
