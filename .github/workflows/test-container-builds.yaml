@@ -14,17 +14,6 @@ name: 'test container image builds'
       - 'internal/**'
       - 'go.mod'
       - 'go.sum'
-  push:
-    paths:
-      - 'docker/**'
-      - '.dockerignore'
-      - 'justfile'
-      - 'cmd/**'
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
-    branches:
-      - 'main'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
