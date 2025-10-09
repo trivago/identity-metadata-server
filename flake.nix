@@ -42,6 +42,7 @@
             kubernetes-helm
             openssl
             terraform
+            ratchet
           ];
         };
       }
