@@ -47,9 +47,11 @@ else
     METADATA_HOST_IP="${BOND_IP:-${FIRST_IP}}"
 fi
 
+echo
 echo "Using Metadata-server IP: ${METADATA_HOST_IP}"
-
 echo "Removing old rules for metadata.google.internal:"
+echo
+
 iptables -t nat -S PREROUTING | grep '169.254.169.254'
 
 # Make sure the index is _reversed_ otherwise the deletion will fail after the first one
@@ -59,11 +61,17 @@ iptables -t nat -L PREROUTING --line-numbers \
   | awk '{print $1}' \
   | xargs -r -I% iptables -t nat -D PREROUTING %
 
+echo
 echo "Adding new rule for metadata.google.internal"
+echo
+
 iptables -w -t nat -I PREROUTING 1 -m comment -m tcp \
   --comment "metadata.google.internal" \
   -d 169.254.169.254 -p tcp --dport 80 \
   -j DNAT --to-destination "${METADATA_HOST_IP}:${PORT:-80}"
 
-echo "iptables now"
+echo
+echo "iptables now:"
+echo
+
 iptables -t nat -S
