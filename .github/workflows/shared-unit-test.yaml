@@ -18,12 +18,12 @@ jobs:
         shell: 'bash'
     steps:
       - name: 'setup golang'
-        uses: 'actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5' # v5.5.0
+        uses: 'actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00' # ratchet:actions/setup-go@v6
         with:
           go-version: '1.24.3'
 
       - name: 'checkout'
-        uses: 'actions/checkout@v4.2.2'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
         id: checkout
 
       - name: 'run tests'
@@ -31,7 +31,7 @@ jobs:
           go test -tags=jsoniter -ldflags="-s -w" -mod=mod -cover -coverprofile=coverage.txt -v ./internal/...
 
       - name: Archive code coverage results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # ratchet:actions/upload-artifact@v4
         with:
           name: 'shared-coverage'
           path: 'coverage.txt'
@@ -48,7 +48,7 @@ jobs:
       pull-requests: 'write'
 
     steps:
-      - uses: 'fgrosse/go-coverage-report@v1.2.0'
+      - uses: 'fgrosse/go-coverage-report@8c1d1a09864211d258937b1b1a5b849f7e4f2682' # ratchet:fgrosse/go-coverage-report@v1.2.0
         env:
           GITHUB_BASELINE_WORKFLOW: ${{ github.workflow }}
         with:

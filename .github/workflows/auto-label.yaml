@@ -11,8 +11,8 @@ jobs:
       pull-requests: 'write'
 
     steps:
-    - name: 'assign path based labels'
-      uses: 'actions/labeler@v5'
+      - name: 'assign path based labels'
+        uses: 'actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9' # ratchet:actions/labeler@v5
 
   commit_labeler:
     runs-on: ['ubuntu-24.04']
@@ -21,26 +21,26 @@ jobs:
       pull-requests: 'write'
 
     steps:
-    - name: 'assign commit based labels'
-      uses: mauroalderete/action-assign-labels@v1
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        maintain-labels-not-matched: true
-        apply-changes: true
-        conventional-commits: |
-          conventional-commits:
-            - type: 'bug'
-              nouns: ['FIX', 'Fix', 'fix']
-              labels: ['🐞 bug']
-            - type: 'feature'
-              nouns: ['FEAT', 'Feat', 'feat']
-              labels: ['⭐️ feature']
-            - type: 'chore'
-              nouns: ['CHORE', 'Chore', 'chore']
-              labels: ['🧹 chore']
-            - type: 'refactor'
-              nouns: ['REFACTOR', 'Refactor', 'refactor']
-              labels: ['🛠️ refactoring']
-            - type: 'security'
-              nouns: ['SECURITY', 'Security', 'security']
-              labels: ['🔓 security']
+      - name: 'assign commit based labels'
+        uses: mauroalderete/action-assign-labels@671a4ca2da0f900464c58b8b5540a1e07133e915 # ratchet:mauroalderete/action-assign-labels@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          maintain-labels-not-matched: true
+          apply-changes: true
+          conventional-commits: |
+            conventional-commits:
+              - type: 'bug'
+                nouns: ['FIX', 'Fix', 'fix']
+                labels: ['🐞 bug']
+              - type: 'feature'
+                nouns: ['FEAT', 'Feat', 'feat']
+                labels: ['⭐️ feature']
+              - type: 'chore'
+                nouns: ['CHORE', 'Chore', 'chore']
+                labels: ['🧹 chore']
+              - type: 'refactor'
+                nouns: ['REFACTOR', 'Refactor', 'refactor']
+                labels: ['🛠️ refactoring']
+              - type: 'security'
+                nouns: ['SECURITY', 'Security', 'security']
+                labels: ['🔓 security']
