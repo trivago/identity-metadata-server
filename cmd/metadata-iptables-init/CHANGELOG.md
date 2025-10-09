@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/trivago/identity-metadata-server/compare/metadata-iptables-init-3.1.0...metadata-iptables-init-3.1.1) (2025-10-09)
+
+
+### Bug Fixes
+
+* improve readability of debug output ([87c3e07](https://github.com/trivago/identity-metadata-server/commit/87c3e075d5745e59df260402ec5ca22873a6e50f))
+
 ## [3.1.0](https://github.com/trivago/identity-metadata-server/compare/metadata-iptables-init-3.0.1...metadata-iptables-init-3.1.0) (2025-08-07)
 
 
