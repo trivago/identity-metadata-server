@@ -10,6 +10,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// CertificateRevocationList manages a list of revoked certificates.
+// It can fetch the list of revoked certificates from a CA pool and check
+// if a given certificate is revoked.
+// The list is periodically refreshed based on a configured interval.
 type CertificateRevocationList struct {
 
 	// updateFunctionGuard is used to prevent multiple updates from happening at the same time.

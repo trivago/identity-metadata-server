@@ -16,6 +16,8 @@ var (
 	lastRefreshTime  time.Time
 )
 
+// HandleRefreshRequest handles a request to refresh the certificate revocation list.
+// It rate-limits refreshes to at most once per minute.
 func HandleRefreshRequest(c *gin.Context, crl *CertificateRevocationList) {
 	lastRefreshGuard.Lock()
 	defer lastRefreshGuard.Unlock()
