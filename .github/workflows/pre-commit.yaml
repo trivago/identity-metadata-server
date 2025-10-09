@@ -12,12 +12,12 @@ jobs:
     if: github.actor != 'github-actions[bot]'
     runs-on: ['ubuntu-24.04']
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # ratchet:actions/checkout@v5
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # ratchet:actions/setup-python@v6
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # ratchet:actions/setup-go@v6
         with:
           go-version: '^1.21.0'
       - run: |
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
           go install golang.org/x/tools/cmd/goimports@latest
-      - uses: pre-commit/action@v3.0.1
+      - uses: 'pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd' # ratchet:pre-commit/action@v3.0.1
