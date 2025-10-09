@@ -7,13 +7,16 @@ name: 'identity-server integration test'
 
 jobs:
   test-mtls:
+    # Only run if relevant files changed or it was manually triggered.
+    # Never run if created by the github-actions bot (e.g. autorelease).
     if: |
+      github.actor != 'github-actions[bot]' && (
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.changed_files, 'cmd/identity-server/') ||
       contains(github.event.pull_request.changed_files, 'internal/') ||
       contains(github.event.pull_request.changed_files, 'tests/') ||
       contains(github.event.pull_request.changed_files, 'go.mod') ||
-      contains(github.event.pull_request.changed_files, 'go.sum')
+      contains(github.event.pull_request.changed_files, 'go.sum'))
 
     runs-on: ['ubuntu-24.04']
     permissions:
