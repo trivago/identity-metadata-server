@@ -3,10 +3,6 @@ name: 'shared unit tests'
 'on':
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
 
 jobs:
   test-shared:
