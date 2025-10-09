@@ -45,8 +45,42 @@ func HandleGetServiceAccounts(c *gin.Context) {
 	}
 
 	srcIdentity := tokenProvider.GetIdentityForIP(c.Request.Context(), c.ClientIP())
+	serviceAccountEmail := srcIdentity.GetBoundGSA()
 
-	response := srcIdentity.GetBoundGSA() + "/\n"
+	// If `recursive` is set, JSON is returned instead of plain text.
+	// The expected fields per object are explained here:
+	// https://cloud.google.com/compute/docs/metadata/predefined-metadata-keys#instance-metadata
+	//
+	// TODO: The "identity" and "token" fields are not yet implemented, as it's not quite clear
+	// how they should be populated, and when exactly they are expected in this context.
+
+	if c.Query("recursive") == "true" {
+		response := map[string]ServiceAccountInfo{
+			serviceAccountEmail: {
+				Email:  serviceAccountEmail,
+				Scopes: []string{shared.DefaultScope},
+				Aliases: []string{
+					"default",
+				},
+			},
+			"default": {
+				Email:  serviceAccountEmail,
+				Scopes: []string{shared.DefaultScope},
+				Aliases: []string{
+					"default",
+				},
+			},
+		}
+
+		c.Header("Metadata-Flavor", "Google")
+		c.JSON(http.StatusOK, response)
+		return
+	}
+
+	// Plain text response with one service account per line
+	// The first line is always the main service account
+
+	response := serviceAccountEmail + "/\n"
 	response += "default/\n"
 
 	c.Header("Metadata-Flavor", "Google")
