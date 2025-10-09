@@ -9,7 +9,8 @@ on:
 
 jobs:
   pre-commit:
-    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ['ubuntu-24.04']
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

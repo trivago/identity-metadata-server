@@ -7,10 +7,11 @@ name: 'identity-server unit tests'
 jobs:
   test-identity-server:
     if: |
+      github.actor != 'github-actions[bot]' && (
       contains(github.event.pull_request.changed_files, 'cmd/identity-server/') ||
       contains(github.event.pull_request.changed_files, 'internal/') ||
       contains(github.event.pull_request.changed_files, 'go.mod') ||
-      contains(github.event.pull_request.changed_files, 'go.sum')
+      contains(github.event.pull_request.changed_files, 'go.sum'))
 
     runs-on: ['ubuntu-24.04']
     defaults:
