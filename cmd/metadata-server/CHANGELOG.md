@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.7.0](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.6.4...metadata-server-3.7.0) (2025-10-09)
+
+
+### Features
+
+* support json output for serviceAccounts endpoint ([#1](https://github.com/trivago/identity-metadata-server/issues/1)) ([4706e9b](https://github.com/trivago/identity-metadata-server/commit/4706e9bc86e8317a825ced05b7d63fc6a7a4fecd))
+
+
+### Miscellaneous
+
+* make unit and integration tests pass if not relevant ([4706e9b](https://github.com/trivago/identity-metadata-server/commit/4706e9bc86e8317a825ced05b7d63fc6a7a4fecd))
+
 ## [3.6.4](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.6.3...metadata-server-3.6.4) (2025-06-23)
 
 
