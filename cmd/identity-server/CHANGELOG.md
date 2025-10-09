@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/trivago/identity-metadata-server/compare/identity-server-2.3.0...identity-server-2.3.1) (2025-10-09)
+
+
+### Bug Fixes
+
+* improve documentation ([28d6b52](https://github.com/trivago/identity-metadata-server/commit/28d6b5260d7ff396d59a224102cd51d3de8024bb))
+
 ## [2.3.0](https://github.com/trivago/identity-metadata-server/compare/identity-server-2.2.1...identity-server-2.3.0) (2025-07-09)
 
 
