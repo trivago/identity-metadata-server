@@ -65,7 +65,7 @@ func main() {
 	// The idle timeout for HTTP2 connections.
 	viper.SetDefault("server.idleTimeout", "620s")
 
-	viper.SetDefault("server.workloadIdentity.projectNumber", "866597189115") // deprecated
+	viper.SetDefault("server.workloadIdentity.projectNumber", "866597189115")
 	viper.SetDefault("server.workloadIdentity.poolName", "integration-test")
 	viper.SetDefault("server.workloadIdentity.providerName", "identity-server")
 	viper.SetDefault("server.certAuthority.project", "trv-identity-server-testing")
