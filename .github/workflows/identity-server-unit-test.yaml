@@ -1,17 +1,17 @@
 name: 'identity-server unit tests'
 
 'on':
-  workflow_dispatch: {}
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - 'cmd/identity-server/**'
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
 
 jobs:
   test-identity-server:
+    if: |
+      contains(github.event.pull_request.changed_files, 'cmd/identity-server/') ||
+      contains(github.event.pull_request.changed_files, 'internal/') ||
+      contains(github.event.pull_request.changed_files, 'go.mod') ||
+      contains(github.event.pull_request.changed_files, 'go.sum')
+
     runs-on: ['ubuntu-24.04']
     defaults:
       run:

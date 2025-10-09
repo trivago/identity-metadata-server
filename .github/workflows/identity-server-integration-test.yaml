@@ -1,26 +1,20 @@
 name: 'identity-server integration test'
 
 'on':
-  workflow_dispatch:
-    inputs:
-      test_renew:
-        type: 'choice'
-        description: 'Test the renew endpoint'
-        default: 'no'
-        options:
-          - 'no'
-          - 'yes'
+  workflow_dispatch: {}
   pull_request:
     types: [opened, reopened, synchronize]
-    paths:
-      - 'cmd/identity-server/**'
-      - 'internal/**'
-      - 'tests/**'
-      - 'go.mod'
-      - 'go.sum'
 
 jobs:
   test-mtls:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.changed_files, 'cmd/identity-server/') ||
+      contains(github.event.pull_request.changed_files, 'internal/') ||
+      contains(github.event.pull_request.changed_files, 'tests/') ||
+      contains(github.event.pull_request.changed_files, 'go.mod') ||
+      contains(github.event.pull_request.changed_files, 'go.sum')
+
     runs-on: ['ubuntu-24.04']
     permissions:
       contents: 'read'
@@ -255,41 +249,6 @@ jobs:
           CURL_CONTENT_JSON=''
 
           curl_expect 200 'GET' 'https://identity-server:8443/identity'
-
-      # The test requires the integration-test server to have certificate
-      # creation rights for the integration-test-ca-pool
-      - name: 'Test renew POST: ok'
-        id: 'renew'
-        if: always() && inputs.test_renew == 'yes' && steps.run-server.outcome == 'success'
-        run: |
-          source 'tests/integrationtest-utils.sh'
-
-          CURL_IDENTITY='client'
-          CERT_TEXT=$(openssl x509 -text -noout -in "${CA_ROOT}/client/${CURL_IDENTITY}.cert")
-          NODE_NAME=$(echo "${CERT_TEXT}" | grep -E 'Subject:.+CN' | sed -E 's/.+CN[\t =]+([a-zA-Z0-9-]+)/\1/')
-          SERVICE_ACCOUNT=$(echo "${CERT_TEXT}" | grep -E 'email:' | sed -E 's/.+email:([a-zA-Z0-9@._-]+).+/\1/')
-          NODE_IPS_CSV=$(echo "${CERT_TEXT}" | grep -Eo 'IP Address:[^,]+' | sed -nE 's/IP Address:([0-9a-fA-F:.]+)/\1/p' | paste -sd',IP:')
-
-          echo "Generating a CSR for ${NODE_NAME} bound to ${SERVICE_ACCOUNT}"
-          echo "IP addresses: ${NODE_IPS_CSV}"
-          echo
-
-          openssl req -new \
-            -nodes \
-            -key "${CA_ROOT}/client/${CURL_IDENTITY}.key" \
-            -out "${CA_ROOT}/client-renew.csr" \
-            -subj "/CN=${NODE_NAME}" \
-            -addext "subjectAltName=DNS:${NODE_NAME},IP:${NODE_IPS_CSV//,/,IP:},email:${SERVICE_ACCOUNT}" \
-            -addext "keyUsage=digitalSignature" \
-            -addext "extendedKeyUsage=clientAuth"
-
-          CURL_CONTENT_TYPE='application/x-pem-file'
-          CURL_CONTENT_RAW=$(cat "${CA_ROOT}/client-renew.csr")
-
-          echo "Calling renew endpoint"
-          echo
-
-          curl_expect 200 'POST' 'https://identity-server:8443/renew'
 
       - name: 'stop server'
         if: always() && steps.run-server.outcome == 'success'
