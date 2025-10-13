@@ -3,7 +3,7 @@ module identity-metadata-server
 go 1.24.2
 
 require (
-	github.com/Depado/ginprom v1.8.1
+	github.com/Depado/ginprom v1.8.2
 	github.com/cespare/xxhash v1.1.0
 	github.com/gin-contrib/pprof v1.5.3
 	github.com/gin-gonic/gin v1.11.0
@@ -16,7 +16,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/trivago/go-bootstrap v1.3.1
 	github.com/trivago/go-kubernetes/v4 v4.0.0
-	golang.org/x/net v0.44.0
+	golang.org/x/net v0.46.0
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 )
 
@@ -92,13 +92,13 @@ require (
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.21.0 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/mod v0.28.0 // indirect
 	golang.org/x/oauth2 v0.31.0 // indirect
 	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/term v0.35.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/term v0.36.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
 	golang.org/x/time v0.13.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
