@@ -256,7 +256,7 @@ func DoWithRetry(count int, client *http.Client, req *http.Request) (*http.Respo
 	// Retry-After header, or after the default waitDuration if not given.
 	case http.StatusTooManyRequests:
 		if waitDurationStr := rsp.Header.Get("Retry-After"); len(waitDurationStr) > 0 {
-			if waitDurationSec, err := strconv.Atoi(waitDurationStr); err == nil && waitDuration > 0 {
+			if waitDurationSec, err := strconv.Atoi(waitDurationStr); err == nil && waitDurationSec > 0 {
 				waitDuration = time.Duration(waitDurationSec) * time.Second
 			}
 		}
