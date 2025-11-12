@@ -15,14 +15,24 @@ name: 'test container image builds'
       - 'go.mod'
       - 'go.sum'
 
-permissions:
-  issues: write
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  ack-comment:
+    if: github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/build') || startsWith(github.event.comment.body, '/test'))
+    runs-on: ['ubuntu-24.04']
+    permissions:
+      issues: 'write'
+    steps:
+      - name: 'Ack'
+        uses: dkershner6/reaction-action@97ede302a1b145b3739dec3ca84a489a34ef48b5 # ratchet:dkershner6/reaction-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commentId: github.event.comment.id
+          reaction: 'eyes'
+
   build-image:
     if: github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/build') || startsWith(github.event.comment.body, '/test')
     runs-on: ['ubuntu-24.04']
@@ -30,6 +40,8 @@ jobs:
       contents: 'read'
       id-token: 'write'
       packages: 'write'
+      issues: 'write'
+      pull-requests: 'write'
     strategy:
       matrix:
         target:
@@ -65,7 +77,8 @@ jobs:
           echo "version=${VERSION}\n" >> $GITHUB_OUTPUT
           just build-multiarch "${{ matrix.target }}" "${VERSION}" --push
 
-      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ratchet:actions/github-script@v8
+      - name: 'Comment published image'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ratchet:actions/github-script@v8
         with:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
@@ -73,5 +86,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: 'Published test image: `ghcr.io/' + context.repo.owner + '/' + context.repo.repo + '/' + matrix.target + ':' + steps.build.outputs['version'] + '`'
+              body: '### Published test image\n\n`ghcr.io/' + context.repo.owner + '/' + context.repo.repo + '/${{ matrix.target }}:${{steps.build.outputs['version']}}`'
             })
