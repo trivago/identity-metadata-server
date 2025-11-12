@@ -131,9 +131,11 @@ func newTokenExchangeRequest(serviceAccount string, scopes []string) (string, er
 // The return value of this function can be used with the GetAccessToken function from the GcpTokenProvider.
 func getTokenRequestToken(tokenRequestBody string) (*shared.TokenExchangeResponse, error) {
 	// See https://cloud.google.com/iam/docs/reference/sts/rest/v1/TopLevel/token
-	tokenRequestTokenResponse, err := http.Post(
-		"https://"+shared.EndpointSTS+"/token", "application/json",
-		strings.NewReader(tokenRequestBody))
+	tokenRequestTokenResponse, err := shared.HttpPOST(
+		"https://"+shared.EndpointSTS+"/token", []byte(tokenRequestBody),
+		map[string]string{
+			"Content-Type": "application/json",
+		}, nil, 2, context.Background())
 
 	if err != nil {
 		return nil, errors.Join(err, errors.New("failed to call token endpoint"))
