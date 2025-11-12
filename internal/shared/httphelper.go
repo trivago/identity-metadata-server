@@ -277,3 +277,18 @@ func DoWithRetry(count int, client *http.Client, req *http.Request) (*http.Respo
 
 	return DoWithRetry(count-1, client, req)
 }
+
+// ForceMaxDuration ensures that the context of the given gin.Context
+// has at most the given timeout duration.
+// If the existing context has a shorter deadline, it is not modified.
+// If the existing context has no deadline, a new context with the given timeout is created.
+// The cancel function of the new context is scheduled to be called after the timeout duration.
+func ForceMaxDuration(timeout time.Duration, ginCtx *gin.Context) {
+	parentCtx := ginCtx.Request.Context()
+	if deadline, ok := parentCtx.Deadline(); !ok || time.Until(deadline) > timeout {
+		newCtx, cancel := context.WithTimeout(parentCtx, timeout)
+		ginCtx.Request = ginCtx.Request.WithContext(newCtx)
+		time.AfterFunc(timeout, cancel)
+	}
+	ginCtx.Next()
+}

@@ -58,6 +58,11 @@ func init() {
 func initGinEndpoints(router *gin.Engine) {
 	initPrometheus(router)
 
+	maxRequestDuration := viper.GetDuration("maxRequestDuration")
+	router.Use(func(g *gin.Context) {
+		shared.ForceMaxDuration(maxRequestDuration, g)
+	})
+
 	for path, handler := range endpoints {
 		router.GET(path, handler)
 	}
@@ -120,6 +125,7 @@ func initConfigDefaults() {
 	viper.SetDefault("poolName", "kubernetes-pool")
 	viper.SetDefault("providerName", "production")
 	viper.SetDefault("mode", "kubernetes")
+	viper.SetDefault("maxRequestDuration", 3*time.Second)
 	viper.SetDefault("cache.serviceAccountTTL", 2*time.Minute)
 	viper.SetDefault("cache.tokenCleanupInterval", time.Hour)
 	viper.SetDefault("cache.tokenMinLifetime", 1*time.Minute)
