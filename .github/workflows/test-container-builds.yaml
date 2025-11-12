@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   build-image:
-    if: github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/build')
+    if: github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/build') || startsWith(github.event.comment.body, '/test')
     runs-on: ['ubuntu-24.04']
     permissions:
       contents: 'read'
