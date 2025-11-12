@@ -260,7 +260,7 @@ func DoWithRetry(count int, client *http.Client, req *http.Request) (*http.Respo
 				waitDuration = time.Duration(waitDurationSec) * time.Second
 			}
 		}
-		log.Info().Msgf("Received 429 Too Many Requests")
+		log.Info().Msgf("Received HTTP 429 \"Too Many Requests\" with a pause of %s", waitDuration.String())
 
 	default:
 		// No retry for other status codes
@@ -272,7 +272,7 @@ func DoWithRetry(count int, client *http.Client, req *http.Request) (*http.Respo
 	select {
 	case <-time.After(waitDuration):
 	case <-ctx.Done():
-		return nil, WrapErrorf(ctx.Err(), "request cancelled while waiting to retry after 429 Too Many Requests")
+		return nil, WrapErrorf(ctx.Err(), "request cancelled while retrying")
 	}
 
 	return DoWithRetry(count-1, client, req)
