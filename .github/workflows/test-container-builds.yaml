@@ -74,7 +74,7 @@ jobs:
         id: build
         run: |
           VERSION=$(just version "${{ matrix.target }}")-test-${{ github.run_number }}"
-          echo "version=${VERSION}\n" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
           just build-multiarch "${{ matrix.target }}" "${VERSION}" --push
 
       - name: 'Comment published image'
