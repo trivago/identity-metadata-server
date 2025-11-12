@@ -120,7 +120,7 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 		name:      serviceAccountName,
 	}
 
-	if serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace); err != nil {
+	if serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace, ctx); err != nil {
 		log.Error().Err(err).
 			Str("pod", pod.GetName()).
 			Str("serviceAccount", ksa.name).
