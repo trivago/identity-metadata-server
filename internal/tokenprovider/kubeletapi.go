@@ -108,7 +108,7 @@ func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodLis
 		"Accept":        "application/json",
 		"User-Agent":    "metadata-server",
 		"Authorization": "Bearer " + token,
-	}, nil, ctx)
+	}, nil, 2, ctx)
 
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
