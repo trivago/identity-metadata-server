@@ -3,15 +3,15 @@ name: 'identity-server unit tests'
 'on':
   pull_request:
     types: [opened, reopened, synchronize]
+    paths:
+      - 'cmd/identity-server/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
 
 jobs:
   test-identity-server:
-    if: |
-      github.actor != 'github-actions[bot]' && (
-      contains(github.event.pull_request.changed_files, 'cmd/identity-server/') ||
-      contains(github.event.pull_request.changed_files, 'internal/') ||
-      contains(github.event.pull_request.changed_files, 'go.mod') ||
-      contains(github.event.pull_request.changed_files, 'go.sum'))
+    if: github.actor != 'github-actions[bot]'
 
     runs-on: ['ubuntu-24.04']
     defaults:
@@ -41,7 +41,6 @@ jobs:
     name: 'Code coverage report'
     needs: 'test-identity-server'
     runs-on: ['ubuntu-24.04']
-    if: github.event_name == 'pull_request'
 
     permissions:
       contents: 'read'
