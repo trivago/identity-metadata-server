@@ -287,8 +287,8 @@ func ForceMaxDuration(timeout time.Duration, ginCtx *gin.Context) {
 	parentCtx := ginCtx.Request.Context()
 	if deadline, ok := parentCtx.Deadline(); !ok || time.Until(deadline) > timeout {
 		newCtx, cancel := context.WithTimeout(parentCtx, timeout)
+		defer cancel()
 		ginCtx.Request = ginCtx.Request.WithContext(newCtx)
-		time.AfterFunc(timeout, cancel)
 	}
 	ginCtx.Next()
 }
