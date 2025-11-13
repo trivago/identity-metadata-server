@@ -120,28 +120,31 @@ func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodLis
 // GetPodByIPviaKubelet retrieves the pod object for a given pod IP.
 // If no pod is found, it will retry up to `retries` times with a
 // linearly increasing delay.
-func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx context.Context) (kubernetes.NamedObject, error) {
+// If the call to the kublet API succeeded and at least one pod was found, the
+// returned KubeletPodList can be used to avoid querying the kubelet API again.
+func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx context.Context) (kubernetes.NamedObject, *KubeletPodList, error) {
 	if retries < 0 {
-		return nil, fmt.Errorf("retries must be 0 or greater")
+		return nil, nil, fmt.Errorf("retries must be 0 or greater")
 	}
+
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
-		pods, err := GetPodsFromKubelet(kubeletHost, ctx)
+		podList, err := GetPodsFromKubelet(kubeletHost, ctx)
 		if err != nil {
-			return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
+			return nil, nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
 		}
 
-		if len(pods.Items) == 0 {
+		if len(podList.Items) == 0 {
 			// As this process is running as a pod, something must be wrong with the kubelet API.
-			return nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
+			return nil, nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
 		}
 
-		candidates := make([]*KubeletPodInfo, 0, len(pods.Items))
-		for idx, pod := range pods.Items {
+		candidates := make([]*KubeletPodInfo, 0, len(podList.Items))
+		for idx, pod := range podList.Items {
 			// We also need to check "pending" pods to support InitContainers, too.
 			if pod.Status.PodIP == podIP && (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") {
 				// Note: We could early out here, but we need to properly react on
 				// ambiguous lookups, i.e. multiple pods with the same IP.
-				candidates = append(candidates, &(pods.Items[idx]))
+				candidates = append(candidates, &(podList.Items[idx]))
 			}
 		}
 
@@ -151,14 +154,14 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 
 			select {
 			case <-ctx.Done():
-				return nil, shared.WrapErrorf(ctx.Err(), "No pod found for IP %s", podIP)
+				return nil, podList, shared.WrapErrorf(ctx.Err(), "No pod found for IP %s", podIP)
 			case <-time.After(200 * time.Duration(tryCounter) * time.Millisecond):
 			}
 
 			continue // Retry if no pod was found
 
 		case 1:
-			return candidates[0].NamedObject(), nil
+			return candidates[0].NamedObject(), podList, nil
 
 		default:
 			// Note: Resolving multiple pods for the same IP is tricky.
@@ -173,17 +176,17 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 			// node is using host networking, as they all share the same host IP.
 			// We log this as a seprate error, as it's a known issue.
 			if podIP == candidates[0].Status.HostIP {
-				return nil, fmt.Errorf("multiple pods found using host networking. This is ambiguous and cannot be resolved properly")
+				return nil, podList, fmt.Errorf("multiple pods found using host networking. This is ambiguous and cannot be resolved properly")
 			}
 
 			// There should not be multiple pods with the same IP (except for host networking).
 			// If there were, routing would not work properly, as the IP is used to route traffic to the pod.
 			// As we test for the status phase, we should never end up here.
-			return nil, fmt.Errorf("%d pods found for IP %s. This is ambiguous and cannot be resolved properly", len(candidates), podIP)
+			return nil, podList, fmt.Errorf("%d pods found for IP %s. This is ambiguous and cannot be resolved properly", len(candidates), podIP)
 		}
 	}
 
-	return nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
+	return nil, nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
 }
 
 // GetPodByIPviaControlPlane retrieves the pod object for a given pod IP.
@@ -232,12 +235,14 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 
 // GetAllPodsFromKubelet retrieves all pods from the kubelet API and their associated service accounts.
 // It returns a list of kubernetesServiceAccountInfo objects for pods that have a bound GSA annotation.
-func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, ctx context.Context) (map[string]kubernetesServiceAccountInfo, error) {
-	var pods []KubeletPodInfo
-
-	podList, err := GetPodsFromKubelet(kubeletHost, ctx)
-	if err != nil {
-		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
+// You can provide a previously retrieved podList to avoid querying the kubelet API again.
+func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podList *KubeletPodList, ctx context.Context) (map[string]kubernetesServiceAccountInfo, error) {
+	if podList == nil {
+		var err error
+		podList, err = GetPodsFromKubelet(kubeletHost, ctx)
+		if err != nil {
+			return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
+		}
 	}
 
 	if len(podList.Items) == 0 {
@@ -245,7 +250,7 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, ctx co
 		return nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
 	}
 
-	pods = make([]KubeletPodInfo, 0, len(podList.Items))
+	pods := make([]KubeletPodInfo, 0, len(podList.Items))
 	for _, pod := range podList.Items {
 		// Filter and adjust pod information
 		if (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") &&
