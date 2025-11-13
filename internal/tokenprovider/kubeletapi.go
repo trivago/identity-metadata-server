@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	kubernetes "github.com/trivago/go-kubernetes/v4"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -226,7 +227,9 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector, ctx)
 		if err != nil {
 			status = -1
-			// TODO: Extract error code from err if possible
+			if statusError, isStatusError := err.(*errors.StatusError); isStatusError {
+				status = int(statusError.ErrStatus.Code)
+			}
 		}
 
 		apiMetrics.TrackDuration(kubeAPIendpoint, metricPathPods, time.Since(requestStart))
@@ -305,7 +308,9 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
 	if err != nil {
 		status = -1
-		// TODO: Extract error code from err if possible
+		if statusError, isStatusError := err.(*errors.StatusError); isStatusError {
+			status = int(statusError.ErrStatus.Code)
+		}
 	}
 
 	apiMetrics.TrackDuration(kubeAPIendpoint, metricPathServiceAccounts, time.Since(requestStart))
