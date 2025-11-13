@@ -226,11 +226,15 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector, ctx)
 		if err != nil {
 			status = -1
-			return nil, shared.WrapErrorf(err, "failed to get pods from kubernetes API")
+			// TODO: Extract error code from err if possible
 		}
 
 		apiMetrics.TrackDuration(kubeAPIendpoint, metricPathPods, time.Since(requestStart))
 		apiMetrics.TrackRequest(kubeAPIendpoint, metricPathPods, status)
+
+		if err != nil {
+			return nil, shared.WrapErrorf(err, "failed to get pods from kubernetes API")
+		}
 
 		switch len(candidates) {
 		case 0:
@@ -301,15 +305,14 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
 	if err != nil {
 		status = -1
-		return nil, shared.WrapErrorf(err, "failed to list service accounts")
+		// TODO: Extract error code from err if possible
 	}
 
 	apiMetrics.TrackDuration(kubeAPIendpoint, metricPathServiceAccounts, time.Since(requestStart))
 	apiMetrics.TrackRequest(kubeAPIendpoint, metricPathServiceAccounts, status)
 
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to list service accounts")
-		return nil, err
+		return nil, shared.WrapErrorf(err, "failed to get service accounts from kubernetes API")
 	}
 
 	results := make(map[string]kubernetesServiceAccountInfo, len(pods))
