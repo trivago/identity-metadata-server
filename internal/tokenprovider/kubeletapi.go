@@ -247,7 +247,11 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, ctx co
 
 	pods = make([]KubeletPodInfo, 0, len(podList.Items))
 	for _, pod := range podList.Items {
-		if (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") && len(pod.Status.PodIP) > 0 && pod.Status.PodIP != pod.Status.HostIP {
+		// Filter and adjust pod information
+		if (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") &&
+			len(pod.Status.PodIP) > 0 &&
+			pod.Status.PodIP != pod.Status.HostIP {
+
 			if len(pod.Spec.ServiceAccountName) == 0 {
 				pod.Spec.ServiceAccountName = "default" // Default service account
 			}
@@ -262,7 +266,6 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, ctx co
 	// Get _all_ service accounts on the cluster.
 	// This produces less calls than getting the service account one-by-one for each pod,
 	// at the cost of longer processing time.
-	// TODO: This list can be cached
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list service accounts")

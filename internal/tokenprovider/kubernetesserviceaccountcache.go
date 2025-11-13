@@ -80,6 +80,26 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 			c.hitMetric.Inc()
 			return info
 		}
+
+		var pod kubernetes.NamedObject
+		var err error
+
+		// We can extend the cache entry past TTL by verifying that the pod still exists
+		// and is owned by the same service account. Best case this will result in 1
+		// api call instead of 2 for every request after TTL.
+		if len(c.kubeletHost) > 0 {
+			pod, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 0, ctx)
+		} else {
+			pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 0, ctx)
+		}
+
+		if err == nil && pod != nil && info.IsOwnedBy(pod) {
+			info.firstSeen = time.Now()
+			c.data[podIP] = info
+			c.hitMetric.Inc()
+			return info
+		}
+
 		delete(c.data, podIP)
 	}
 
