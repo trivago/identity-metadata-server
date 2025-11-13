@@ -229,3 +229,77 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 
 	return nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
 }
+
+// GetAllPodsFromKubelet retrieves all pods from the kubelet API and their associated service accounts.
+// It returns a list of kubernetesServiceAccountInfo objects for pods that have a bound GSA annotation.
+func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, ctx context.Context) (map[string]kubernetesServiceAccountInfo, error) {
+	var pods []KubeletPodInfo
+
+	podList, err := GetPodsFromKubelet(kubeletHost, ctx)
+	if err != nil {
+		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
+	}
+
+	if len(podList.Items) == 0 {
+		// As this process is running as a pod, something must be wrong with the kubelet API.
+		return nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
+	}
+
+	pods = make([]KubeletPodInfo, 0, len(podList.Items))
+	for _, pod := range podList.Items {
+		if (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") && len(pod.Status.PodIP) > 0 && pod.Status.PodIP != pod.Status.HostIP {
+			if len(pod.Spec.ServiceAccountName) == 0 {
+				pod.Spec.ServiceAccountName = "default" // Default service account
+			}
+			pods = append(pods, pod)
+		}
+	}
+
+	if len(pods) == 0 {
+		return nil, fmt.Errorf("no valid pods returned from kubelet API")
+	}
+
+	// Get _all_ service accounts on the cluster.
+	// This produces less calls than getting the service account one-by-one for each pod,
+	// at the cost of longer processing time.
+	// TODO: This list can be cached
+	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to list service accounts")
+		return nil, err
+	}
+
+	results := make(map[string]kubernetesServiceAccountInfo, len(pods))
+	for _, pod := range pods {
+		info := kubernetesServiceAccountInfo{
+			name:      pod.Spec.ServiceAccountName,
+			namespace: pod.Metadata.Namespace,
+			owner:     pod.NamedObject(),
+			firstSeen: time.Now(),
+		}
+
+		// Find the service account for this pod and extract the bound GSA annotation
+
+		for _, sa := range serviceAccounts {
+			if sa.GetNamespace() != info.namespace {
+				continue
+			}
+			if sa.GetName() != info.name {
+				continue
+			}
+
+			// We can ignore the error here, as we know the annotation might not be set
+			// In that case, we just skip this service account in the check below.
+			info.boundGSA, _ = sa.GetAnnotation("iam.gke.io/gcp-service-account")
+			break
+		}
+
+		if len(info.boundGSA) == 0 {
+			continue // No bound GSA bound
+		}
+
+		results[pod.Status.PodIP] = info
+	}
+
+	return results, nil
+}

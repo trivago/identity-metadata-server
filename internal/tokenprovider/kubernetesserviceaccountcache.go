@@ -68,9 +68,7 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	info, isKnown := c.data[podIP]
-
-	if isKnown {
+	if info, isKnown := c.data[podIP]; isKnown {
 		// TODO: This is a bit dangerous for very shortlived pods.
 		//       As far as I know, kubernetes pod IPs take some time to be recycled,
 		//       not only because pods take some time to shot down/spin up, but this
@@ -87,19 +85,55 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 
 	c.missMetric.Inc()
 
-	var (
-		pod kubernetes.NamedObject
-		err error
-	)
-
 	// If kubeletHost is set, we will try to get the pod from the kubelet API.
 	// Otherwise, we will try to get the pod from the control plane API.
 	if len(c.kubeletHost) > 0 {
-		pod, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 3, ctx)
-	} else {
-		pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 3, ctx)
+		return c.getFromKubelet(podIP, ctx)
 	}
 
+	return c.getFromControlPlane(podIP, ctx)
+}
+
+// getFromKubelet retrieves the service account information for the given pod IP
+// by querying the kubelet API.
+// If the pod or service account cannot be found, an empty kubernetesServiceAccountInfo
+// will be returned.
+func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, ctx context.Context) kubernetesServiceAccountInfo {
+	foundPods, err := GetAllPodsFromKubelet(c.kubeletHost, c.k8s, ctx)
+	if err != nil {
+		log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pods from kubelet")
+		return kubernetesServiceAccountInfo{}
+	}
+
+	for foundPodIP, foundPodInfo := range foundPods {
+		if cachedInfo, isKnown := c.data[foundPodIP]; isKnown {
+			// Do not refresh up-to-date entries
+			if cachedInfo.Equal(foundPodInfo) && time.Since(cachedInfo.firstSeen) < c.ttl {
+				continue
+			}
+		}
+		// Not known or outdated, store/update it
+		c.data[foundPodIP] = foundPodInfo
+	}
+
+	// Clean up stale entries. As we have the full list of pods from the kubelet,
+	// we can remove any entries that are not present anymore.
+	for ip := range c.data {
+		if _, foundOnNode := foundPods[ip]; !foundOnNode {
+			delete(c.data, ip)
+			continue
+		}
+	}
+
+	return c.data[podIP]
+}
+
+// getFromControlPlane retrieves the service account information for the given pod IP
+// by querying the control plane API.
+// If the pod or service account cannot be found, an empty kubernetesServiceAccountInfo
+// will be returned.
+func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, ctx context.Context) kubernetesServiceAccountInfo {
+	pod, err := GetPodByIPviaControlPlane(c.k8s, podIP, 3, ctx)
 	if err != nil || pod == nil {
 		log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pod for IP")
 		return kubernetesServiceAccountInfo{}
