@@ -108,7 +108,7 @@ func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodLis
 		"Accept":        "application/json",
 		"User-Agent":    "metadata-server",
 		"Authorization": "Bearer " + token,
-	}, nil, ctx)
+	}, nil, 2, ctx)
 
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
@@ -200,7 +200,7 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 	fieldSelector := fmt.Sprintf("status.podIP==%s,status.phase!=Succeeded,status.phase!=Failed,status.phase!=Unknown", podIP)
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
 
-		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector)
+		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector, ctx)
 		if err != nil {
 			return nil, shared.WrapErrorf(err, "failed to get pods from kubernetes API")
 		}

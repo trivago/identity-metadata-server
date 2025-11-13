@@ -46,7 +46,7 @@ func InitClientRootCA(project, region, poolName string) ([]*x509.Certificate, *x
 
 	response, err := shared.HttpPOSTJson[FetchCACertsResponse](url, nil, map[string]string{
 		"Authorization": "Bearer " + bearerToken,
-	}, nil, context.Background())
+	}, nil, 2, context.Background())
 
 	if err != nil {
 		return nil, nil, errors.Join(err, errors.New("failed to call fetchCaCerts"))
@@ -90,7 +90,7 @@ func GetCertificateAuthority(project, region, poolName, name string, ctx context
 
 	return shared.HttpGETJson[CertificateAuthorityData](url, nil, map[string]string{
 		"Authorization": "Bearer " + bearerToken,
-	}, nil, ctx)
+	}, nil, 2, ctx)
 }
 
 // GetRevokedCertificates retrieves the revoked certificates from all
@@ -107,7 +107,7 @@ func GetRevokedCertificates(project, region, poolName, name string, ctx context.
 	processErrors := error(nil)
 
 	for _, crlURL := range authority.AccessURLs.RevocationLists {
-		rsp, err := shared.HttpGET(crlURL, nil, map[string]string{}, nil, ctx)
+		rsp, err := shared.HttpGET(crlURL, nil, map[string]string{}, nil, 2, ctx)
 		if err != nil {
 			processErrors = errors.Join(processErrors, err)
 			continue

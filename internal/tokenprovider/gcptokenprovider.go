@@ -47,7 +47,7 @@ func (tp *GcpTokenProvider) GetAccessToken(ctx context.Context, tokenRequestToke
 		map[string]string{
 			"Content-Type":  "application/json",
 			"Authorization": "Bearer " + tokenRequestToken.AccessToken,
-		}, nil, ctx)
+		}, nil, 2, ctx)
 
 	tp.trackApiResponse(shared.EndpointIAMCredentials, metricPath, accessTokenResponse, requestStart)
 	if err != nil {
@@ -117,7 +117,7 @@ func (tp *GcpTokenProvider) GetIdentityToken(ctx context.Context, tokenRequestTo
 		map[string]string{
 			"Content-Type":  "application/json",
 			"Authorization": "Bearer " + tokenRequestToken.AccessToken,
-		}, nil, ctx)
+		}, nil, 2, ctx)
 
 	tp.trackApiResponse(shared.EndpointIAMCredentials, metricPath, identityTokenResponse, requestStart)
 	if err != nil {

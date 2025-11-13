@@ -154,7 +154,7 @@ func (tp *HostTokenProvider) GetIdentityForIP(ctx context.Context, ip string) So
 	}
 
 	requestStart := time.Now()
-	rsp, err := shared.HttpGET(tp.serverUrl+"/identity", nil, nil, &tp.certificate, ctx)
+	rsp, err := shared.HttpGET(tp.serverUrl+"/identity", nil, nil, &tp.certificate, 2, ctx)
 
 	tp.trackApiResponse(tp.serverUrl, metricPath, rsp, requestStart)
 	if err != nil {
@@ -261,7 +261,7 @@ func (tp *HostTokenProvider) getSignedRequestToken(ctx context.Context, requestT
 	}
 
 	requestStart := time.Now()
-	oidcTokenRsp, err := shared.HttpGET(tp.serverUrl+"/token", identityTokenRequest, nil, &tp.certificate, ctx)
+	oidcTokenRsp, err := shared.HttpGET(tp.serverUrl+"/token", identityTokenRequest, nil, &tp.certificate, 2, ctx)
 
 	tp.trackApiResponse(tp.serverUrl, metricPath, oidcTokenRsp, requestStart)
 	if err != nil {
@@ -297,7 +297,7 @@ func (tp *HostTokenProvider) getSignedRequestToken(ctx context.Context, requestT
 		LifetimeSec:        strconv.Itoa(int(requestTokenLifetime.Seconds())),
 	}
 
-	tokenRequestBody, err := jsoniter.MarshalToString(tokenRequest)
+	tokenRequestBody, err := jsoniter.Marshal(tokenRequest)
 	if err != nil {
 		log.Error().Msg("Failed to marshal token request")
 		return nil, shared.WrapErrorWithStatus(err, http.StatusBadRequest)
@@ -306,9 +306,12 @@ func (tp *HostTokenProvider) getSignedRequestToken(ctx context.Context, requestT
 	requestStart = time.Now()
 
 	// See https://cloud.google.com/iam/docs/reference/sts/rest/v1/TopLevel/token
-	rsp, err := http.Post("https://"+shared.EndpointSTS+"/token",
-		"application/json",
-		strings.NewReader(tokenRequestBody))
+	rsp, err := shared.HttpPOST("https://"+shared.EndpointSTS+"/token",
+		tokenRequestBody,
+		map[string]string{
+			"Content-Type": "application/json",
+		},
+		nil, 2, ctx)
 
 	tp.trackApiResponse(shared.EndpointSTS, metricPath, rsp, requestStart)
 	return rsp, err
@@ -379,7 +382,7 @@ func (tp *HostTokenProvider) TryRefreshCertificate() error {
 	rsp, err := shared.HttpPOST(tp.serverUrl+"/renew", []byte(csr), map[string]string{
 		"Content-Type": "application/x-pem-file",
 		"Accept":       "application/x-pem-file",
-	}, &tp.certificate, context.Background())
+	}, &tp.certificate, 2, context.Background())
 
 	tp.trackApiResponse(tp.serverUrl, metricPath, rsp, requestStart)
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -92,7 +94,7 @@ func ReadBodyWithLimit(rsp *http.Response, maxBytes int) ([]byte, error) {
 }
 
 // HttpPOST sends a POST request to the given address with the given body and headers.
-func HttpPOST(address string, body []byte, header map[string]string, cert *tls.Certificate, ctx context.Context) (*http.Response, error) {
+func HttpPOST(address string, body []byte, header map[string]string, cert *tls.Certificate, retries int, ctx context.Context) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		address,
 		bytes.NewReader(body))
@@ -106,11 +108,11 @@ func HttpPOST(address string, body []byte, header map[string]string, cert *tls.C
 	}
 
 	client := newHttpClient(cert)
-	return client.Do(req)
+	return DoWithRetry(retries, client, req)
 }
 
 // HttpPOST sends a POST request to the given address with the given body and headers.
-func HttpGET(address string, body []byte, header map[string]string, cert *tls.Certificate, ctx context.Context) (*http.Response, error) {
+func HttpGET(address string, body []byte, header map[string]string, cert *tls.Certificate, retries int, ctx context.Context) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET",
 		address,
 		bytes.NewReader(body))
@@ -124,14 +126,14 @@ func HttpGET(address string, body []byte, header map[string]string, cert *tls.Ce
 	}
 
 	client := newHttpClient(cert)
-	return client.Do(req)
+	return DoWithRetry(retries, client, req)
 }
 
 // HttpGETJson sends a GET request to the given address with the given body and headers.
 // It returns the response body as a JSON decoded object of type T.
 // In case of a non-200 status code, it reads up to 32KB of the response body and includes it in the error message.
 // If the response body is empty, it returns an error with a textual representation of the status code.
-func HttpGETJson[T any](address string, body []byte, header map[string]string, cert *tls.Certificate, ctx context.Context) (*T, error) {
+func HttpGETJson[T any](address string, body []byte, header map[string]string, cert *tls.Certificate, retries int, ctx context.Context) (*T, error) {
 	if header == nil {
 		header = make(map[string]string)
 	}
@@ -139,7 +141,7 @@ func HttpGETJson[T any](address string, body []byte, header map[string]string, c
 		header["Accept"] = "application/json"
 	}
 
-	resp, err := HttpGET(address, body, header, cert, ctx)
+	resp, err := HttpGET(address, body, header, cert, retries, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +168,7 @@ func HttpGETJson[T any](address string, body []byte, header map[string]string, c
 // HttpPOSTJson sends a POST request to the given address with the given body and headers.
 // It returns the response body as a JSON decoded object of type T.
 // In case of a non-200 status code, it reads up to 32KB of the response body and includes it in the error message.
-func HttpPOSTJson[T any](address string, body []byte, header map[string]string, cert *tls.Certificate, ctx context.Context) (*T, error) {
+func HttpPOSTJson[T any](address string, body []byte, header map[string]string, cert *tls.Certificate, retries int, ctx context.Context) (*T, error) {
 	if header == nil {
 		header = make(map[string]string)
 	}
@@ -174,7 +176,7 @@ func HttpPOSTJson[T any](address string, body []byte, header map[string]string, 
 		header["Accept"] = "application/json"
 	}
 
-	resp, err := HttpPOST(address, body, header, cert, ctx)
+	resp, err := HttpPOST(address, body, header, cert, retries, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -221,4 +223,72 @@ func newHttpClient(cert *tls.Certificate) *http.Client {
 			TLSClientConfig: tlsConfig,
 		},
 	}
+}
+
+// DoWithRetry performs the given HTTP request with retries for specific status codes.
+// It retries up to `count` times for status codes that indicate a retry is appropriate,
+// such as 429 Too Many Requests. The function waits for a specified duration before each retry,
+// which can be influenced by the Retry-After header in the response.
+// If the context is cancelled while waiting, it returns an error.
+func DoWithRetry(count int, client *http.Client, req *http.Request) (*http.Response, error) {
+	// Extract context from request or create a new one
+	ctx := req.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Perform the request
+	rsp, err := client.Do(req)
+	if err != nil {
+		return rsp, err
+	}
+
+	// Return if there's no retry left
+	if count <= 0 {
+		return rsp, nil
+	}
+
+	// We always wait a bit before retrying
+	waitDuration := time.Second
+
+	switch rsp.StatusCode {
+	// Handle rate limiting. We retry after the given time in the
+	// Retry-After header, or after the default waitDuration if not given.
+	case http.StatusTooManyRequests:
+		if waitDurationStr := rsp.Header.Get("Retry-After"); len(waitDurationStr) > 0 {
+			if waitDurationSec, err := strconv.Atoi(waitDurationStr); err == nil && waitDurationSec > 0 {
+				waitDuration = time.Duration(waitDurationSec) * time.Second
+			}
+		}
+		log.Info().Msgf("Received HTTP 429 \"Too Many Requests\" with a pause of %s", waitDuration.String())
+
+	default:
+		// No retry for other status codes
+		return rsp, nil
+	}
+
+	// Always wait a bit before retrying
+	log.Debug().Msgf("Waiting %s before retrying request to %s (remaining retries: %d)...", waitDuration.String(), req.URL.String(), count-1)
+	select {
+	case <-time.After(waitDuration):
+	case <-ctx.Done():
+		return nil, WrapErrorf(ctx.Err(), "request cancelled while retrying")
+	}
+
+	return DoWithRetry(count-1, client, req)
+}
+
+// ForceMaxDuration ensures that the context of the given gin.Context
+// has at most the given timeout duration.
+// If the existing context has a shorter deadline, it is not modified.
+// If the existing context has no deadline, a new context with the given timeout is created.
+// The cancel function of the new context is scheduled to be called after the timeout duration.
+func ForceMaxDuration(timeout time.Duration, ginCtx *gin.Context) {
+	parentCtx := ginCtx.Request.Context()
+	if deadline, ok := parentCtx.Deadline(); !ok || time.Until(deadline) > timeout {
+		newCtx, cancel := context.WithTimeout(parentCtx, timeout)
+		defer cancel()
+		ginCtx.Request = ginCtx.Request.WithContext(newCtx)
+	}
+	ginCtx.Next()
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"identity-metadata-server/internal/certificates"
+	"identity-metadata-server/internal/shared"
 
 	"github.com/Depado/ginprom"
 	"github.com/gin-contrib/pprof"
@@ -52,6 +53,7 @@ func initPrometheus(router *gin.Engine) {
 
 func main() {
 	viper.SetDefault("port", 8443)
+	viper.SetDefault("maxRequestDuration", 3*time.Second)
 	// If the server key changes, the JWKS must be re-registered with the workload identity provider
 	viper.SetDefault("server.key", "server.pem")
 	// If the keyName is changed, the JWKS must be re-registered with the workload identity provider
@@ -158,6 +160,11 @@ func main() {
 		Ready:       httpserver.AlwaysOk,
 		InitRoutes: func(router *gin.Engine) {
 			initPrometheus(router)
+
+			maxRequestDuration := viper.GetDuration("maxRequestDuration")
+			router.Use(func(g *gin.Context) {
+				shared.ForceMaxDuration(maxRequestDuration, g)
+			})
 
 			if viper.GetBool("profile") {
 				pprof.Register(router, "/debug/pprof")

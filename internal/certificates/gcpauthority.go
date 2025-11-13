@@ -54,7 +54,7 @@ func GetGCPCertificate(config GCPCertificateAuthorityConfig, gcpAccessToken stri
 			"Content-Type":  "application/json",
 			"Authorization": "Bearer " + gcpAccessToken,
 		},
-		nil, ctx)
+		nil, 2, ctx)
 
 	if err != nil {
 		return nil, err
@@ -155,7 +155,7 @@ func CreateGCPCertificateFromCSR(config GCPCertificateAuthorityConfig, gcpAccess
 			"Content-Type":  "application/json",
 			"Authorization": "Bearer " + gcpAccessToken,
 		},
-		nil, ctx)
+		nil, 2, ctx)
 
 	if err != nil {
 		return nil, err
