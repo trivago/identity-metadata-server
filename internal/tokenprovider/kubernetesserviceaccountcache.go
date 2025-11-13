@@ -21,11 +21,12 @@ type KubernetesServiceAccountCache struct {
 	hitMetric   prometheus.Counter
 	missMetric  prometheus.Counter
 	kubeletHost string
+	apiMetrics  *shared.APIMetrics
 }
 
 // NewKubernetesServiceAccountCache creates a new service account cache with a given TTL
 // for times stored inside the cache.
-func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost string, ttl time.Duration) *KubernetesServiceAccountCache {
+func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost string, ttl time.Duration, apiMetrics *shared.APIMetrics) *KubernetesServiceAccountCache {
 	hitMetric := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace:   "metadata_server",
 		Subsystem:   "serviceaccount_cache",
@@ -56,6 +57,7 @@ func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost str
 		hitMetric:   hitMetric,
 		missMetric:  missMetric,
 		kubeletHost: kubeletHost,
+		apiMetrics:  apiMetrics,
 	}
 }
 
@@ -91,9 +93,9 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 		// api call instead of 2 for every request after TTL.
 		var err error
 		if len(c.kubeletHost) > 0 {
-			pod, podList, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 0, ctx)
+			pod, podList, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 0, c.apiMetrics, ctx)
 		} else {
-			pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 0, ctx)
+			pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 0, c.apiMetrics, ctx)
 		}
 
 		if err == nil && pod != nil && info.IsOwnedBy(pod) {
@@ -123,7 +125,7 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 // will be returned.
 func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, podList *KubeletPodList, ctx context.Context) kubernetesServiceAccountInfo {
 	// The caller may pass a podlist from a previous call to avoid querying the kubelet twice.
-	foundPods, err := GetAllPodsFromKubelet(c.kubeletHost, c.k8s, podList, ctx)
+	foundPods, err := GetAllPodsFromKubelet(c.kubeletHost, c.k8s, podList, c.apiMetrics, ctx)
 	if err != nil {
 		log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pods from kubelet")
 		return kubernetesServiceAccountInfo{}
@@ -160,7 +162,7 @@ func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, pod ku
 	// The caller may pass a pod object from a previous call to avoid querying the control plane twice.
 	if pod == nil {
 		var err error
-		pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 3, ctx)
+		pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 3, c.apiMetrics, ctx)
 		if err != nil || pod == nil {
 			log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pod for IP")
 			return kubernetesServiceAccountInfo{}
@@ -182,7 +184,12 @@ func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, pod ku
 		name:      serviceAccountName,
 	}
 
-	if serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace, ctx); err != nil {
+	requestStart := time.Now()
+	statusCode := 200
+
+	serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace, ctx)
+	if err != nil {
+		statusCode = -1
 		log.Error().Err(err).
 			Str("pod", pod.GetName()).
 			Str("serviceAccount", ksa.name).
@@ -197,6 +204,9 @@ func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, pod ku
 				Msg("Failed to get gcp service account annotation")
 		}
 	}
+
+	_ = c.apiMetrics.TrackDuration(kubeAPIendpoint, metricPathServiceAccounts, time.Since(requestStart))
+	_ = c.apiMetrics.TrackRequest(kubeAPIendpoint, metricPathServiceAccounts, statusCode)
 
 	c.data[podIP] = ksa
 	return ksa

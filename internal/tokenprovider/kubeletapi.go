@@ -13,6 +13,11 @@ import (
 	kubernetes "github.com/trivago/go-kubernetes/v4"
 )
 
+const (
+	metricPathPods            = "pods"
+	metricPathServiceAccounts = "serviceaccounts"
+)
+
 type KubeletPodInfo struct {
 	Metadata struct {
 		Name      string `json:"name"`
@@ -98,17 +103,29 @@ func GetServiceAccountToken() (string, error) {
 // The service account needs to have a ClusterRole bound that allows "get" on "nodes/proxy".
 // The kubelet API is typically available at https://localhost:10250 when the pod is running
 // in host network mode.
-func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodList, error) {
+func GetPodsFromKubelet(kubeletHost string, apiMetrics *shared.APIMetrics, ctx context.Context) (*KubeletPodList, error) {
 	token, err := GetServiceAccountToken()
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to read service account token from disk")
 	}
 
+	requestStart := time.Now()
 	pods, err := shared.HttpGETJson[KubeletPodList](kubeletHost+"/pods", nil, map[string]string{
 		"Accept":        "application/json",
 		"User-Agent":    "metadata-server",
 		"Authorization": "Bearer " + token,
 	}, nil, 2, ctx)
+
+	status := 200
+	if err != nil {
+		status = -1
+		if httpErr, isHttpErr := err.(shared.ErrorWithStatus); isHttpErr {
+			status = httpErr.Code
+		}
+	}
+
+	_ = apiMetrics.TrackDuration(kubeAPIendpoint, metricPathPods, time.Since(requestStart))
+	_ = apiMetrics.TrackRequest(kubeAPIendpoint, metricPathPods, status)
 
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
@@ -122,13 +139,13 @@ func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodLis
 // linearly increasing delay.
 // If the call to the kublet API succeeded and at least one pod was found, the
 // returned KubeletPodList can be used to avoid querying the kubelet API again.
-func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx context.Context) (kubernetes.NamedObject, *KubeletPodList, error) {
+func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, apiMetrics *shared.APIMetrics, ctx context.Context) (kubernetes.NamedObject, *KubeletPodList, error) {
 	if retries < 0 {
 		return nil, nil, fmt.Errorf("retries must be 0 or greater")
 	}
 
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
-		podList, err := GetPodsFromKubelet(kubeletHost, ctx)
+		podList, err := GetPodsFromKubelet(kubeletHost, apiMetrics, ctx)
 		if err != nil {
 			return nil, nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
 		}
@@ -195,7 +212,7 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 // available and does not require the pod to be running on the same node as the
 // metadata server.
 // It will retry a few times in case the pod is not found yet.
-func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries int, ctx context.Context) (kubernetes.NamedObject, error) {
+func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries int, apiMetrics *shared.APIMetrics, ctx context.Context) (kubernetes.NamedObject, error) {
 	if retries < 0 {
 		return nil, fmt.Errorf("retries must be 0 or greater")
 	}
@@ -203,10 +220,17 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 	fieldSelector := fmt.Sprintf("status.podIP==%s,status.phase!=Succeeded,status.phase!=Failed,status.phase!=Unknown", podIP)
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
 
+		requestStart := time.Now()
+		status := 200
+
 		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector, ctx)
 		if err != nil {
+			status = -1
 			return nil, shared.WrapErrorf(err, "failed to get pods from kubernetes API")
 		}
+
+		apiMetrics.TrackDuration(kubeAPIendpoint, metricPathPods, time.Since(requestStart))
+		apiMetrics.TrackRequest(kubeAPIendpoint, metricPathPods, status)
 
 		switch len(candidates) {
 		case 0:
@@ -236,10 +260,10 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 // GetAllPodsFromKubelet retrieves all pods from the kubelet API and their associated service accounts.
 // It returns a list of kubernetesServiceAccountInfo objects for pods that have a bound GSA annotation.
 // You can provide a previously retrieved podList to avoid querying the kubelet API again.
-func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podList *KubeletPodList, ctx context.Context) (map[string]kubernetesServiceAccountInfo, error) {
+func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podList *KubeletPodList, apiMetrics *shared.APIMetrics, ctx context.Context) (map[string]kubernetesServiceAccountInfo, error) {
 	if podList == nil {
 		var err error
-		podList, err = GetPodsFromKubelet(kubeletHost, ctx)
+		podList, err = GetPodsFromKubelet(kubeletHost, apiMetrics, ctx)
 		if err != nil {
 			return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
 		}
@@ -271,7 +295,18 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 	// Get _all_ service accounts on the cluster.
 	// This produces less calls than getting the service account one-by-one for each pod,
 	// at the cost of longer processing time.
+	requestStart := time.Now()
+	status := 200
+
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
+	if err != nil {
+		status = -1
+		return nil, shared.WrapErrorf(err, "failed to list service accounts")
+	}
+
+	apiMetrics.TrackDuration(kubeAPIendpoint, metricPathServiceAccounts, time.Since(requestStart))
+	apiMetrics.TrackRequest(kubeAPIendpoint, metricPathServiceAccounts, status)
+
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to list service accounts")
 		return nil, err
