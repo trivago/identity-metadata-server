@@ -151,7 +151,10 @@ func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, podList *Ku
 		}
 	}
 
-	return c.data[podIP]
+	if info, ok := c.data[podIP]; ok {
+		return info
+	}
+	return kubernetesServiceAccountInfo{}
 }
 
 // getFromControlPlane retrieves the service account information for the given pod IP

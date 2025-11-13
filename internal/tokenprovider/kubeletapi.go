@@ -346,7 +346,7 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 		}
 
 		if len(info.boundGSA) == 0 {
-			continue // No bound GSA bound
+			continue // No bound GSA found
 		}
 
 		results[pod.Status.PodIP] = info
