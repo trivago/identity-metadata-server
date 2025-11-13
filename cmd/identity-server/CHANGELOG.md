@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.2](https://github.com/trivago/identity-metadata-server/compare/identity-server-2.3.1...identity-server-2.3.2) (2025-11-13)
+
+
+### Bug Fixes
+
+* properly react on timeouts and HTTP 429 ([#6](https://github.com/trivago/identity-metadata-server/issues/6)) ([dd9ad86](https://github.com/trivago/identity-metadata-server/commit/dd9ad868fdfd4d3c30c1a8e740e07e1d10dbba38))
+* use internal HTTP call instead of the default golang one ([dd9ad86](https://github.com/trivago/identity-metadata-server/commit/dd9ad868fdfd4d3c30c1a8e740e07e1d10dbba38))
+
 ## [2.3.1](https://github.com/trivago/identity-metadata-server/compare/identity-server-2.3.0...identity-server-2.3.1) (2025-10-09)
 
 

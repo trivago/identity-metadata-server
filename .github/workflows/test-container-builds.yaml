@@ -20,19 +20,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ack-comment:
-    if: github.event_name == 'issue_comment' && (startsWith(github.event.comment.body, '/build') || startsWith(github.event.comment.body, '/test'))
-    runs-on: ['ubuntu-24.04']
-    permissions:
-      issues: 'write'
-    steps:
-      - name: 'Ack'
-        uses: dkershner6/reaction-action@97ede302a1b145b3739dec3ca84a489a34ef48b5 # ratchet:dkershner6/reaction-action@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commentId: github.event.comment.id
-          reaction: 'eyes'
-
   build-image:
     if: github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/build') || startsWith(github.event.comment.body, '/test')
     runs-on: ['ubuntu-24.04']
@@ -73,7 +60,7 @@ jobs:
       - name: 'Build ${{ matrix.target }}'
         id: build
         run: |
-          VERSION=$(just version "${{ matrix.target }}")-test-${{ github.run_number }}"
+          VERSION="$(just version "${{ matrix.target }}")-test-${{ github.run_number }}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           just build-multiarch "${{ matrix.target }}" "${VERSION}" --push
 
