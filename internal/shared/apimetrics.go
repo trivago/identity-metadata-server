@@ -72,7 +72,6 @@ func (a *APIMetrics) TrackRequest(endpoint, path string, status int) error {
 		a.endpointRequestCount[subsystem] = counter
 	}
 
-	log.Debug().Msgf("Registered counter value for %s_%s{path=\"%s\", status=\"%d\"}", a.namespace, subsystem, path, status)
 	counter.WithLabelValues(strconv.Itoa(status), path).Inc()
 	return nil
 }
@@ -105,7 +104,6 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 	}
 
 	histogram.WithLabelValues(path).Observe(d.Seconds())
-	log.Debug().Msgf("Registered histogram value for %s_%s{path=\"%s\"}", a.namespace, subsystem, path)
 	return nil
 }
 
