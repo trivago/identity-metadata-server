@@ -94,6 +94,9 @@ func GetServiceAccountToken() (string, error) {
 
 	if err == nil {
 		serviceAccountToken = strings.TrimSpace(string(token))
+		if len(serviceAccountToken) == 0 {
+			return "", fmt.Errorf("service account token is empty")
+		}
 		return serviceAccountToken, nil
 	}
 	return "", err
