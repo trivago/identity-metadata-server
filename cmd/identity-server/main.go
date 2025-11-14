@@ -53,7 +53,7 @@ func initPrometheus(router *gin.Engine) {
 
 func main() {
 	viper.SetDefault("port", 8443)
-	viper.SetDefault("maxRequestDuration", 3*time.Second)
+	viper.SetDefault("maxRequestDuration", 5*time.Second)
 	// If the server key changes, the JWKS must be re-registered with the workload identity provider
 	viper.SetDefault("server.key", "server.pem")
 	// If the keyName is changed, the JWKS must be re-registered with the workload identity provider

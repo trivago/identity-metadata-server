@@ -156,7 +156,7 @@ func (tp *HostTokenProvider) GetIdentityForIP(ctx context.Context, ip string) So
 	requestStart := time.Now()
 	rsp, err := shared.HttpGET(tp.serverUrl+"/identity", nil, nil, &tp.certificate, 2, ctx)
 
-	tp.trackApiResponse(tp.serverUrl, metricPath, rsp, requestStart)
+	tp.metrics.TrackCallResponse(tp.serverUrl, metricPath, requestStart, rsp, err)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get identity for current host")
 		return hostIdentity{}
@@ -263,7 +263,7 @@ func (tp *HostTokenProvider) getSignedRequestToken(ctx context.Context, requestT
 	requestStart := time.Now()
 	oidcTokenRsp, err := shared.HttpGET(tp.serverUrl+"/token", identityTokenRequest, nil, &tp.certificate, 2, ctx)
 
-	tp.trackApiResponse(tp.serverUrl, metricPath, oidcTokenRsp, requestStart)
+	tp.metrics.TrackCallResponse(tp.serverUrl, metricPath, requestStart, oidcTokenRsp, err)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to get identity token")
 		return nil, shared.WrapErrorWithStatus(err, http.StatusInternalServerError)
@@ -313,7 +313,7 @@ func (tp *HostTokenProvider) getSignedRequestToken(ctx context.Context, requestT
 		},
 		nil, 2, ctx)
 
-	tp.trackApiResponse(shared.EndpointSTS, metricPath, rsp, requestStart)
+	tp.metrics.TrackCallResponse(shared.EndpointSTS, metricPath, requestStart, rsp, err)
 	return rsp, err
 }
 
@@ -384,7 +384,7 @@ func (tp *HostTokenProvider) TryRefreshCertificate() error {
 		"Accept":       "application/x-pem-file",
 	}, &tp.certificate, 2, context.Background())
 
-	tp.trackApiResponse(tp.serverUrl, metricPath, rsp, requestStart)
+	tp.metrics.TrackCallResponse(tp.serverUrl, metricPath, requestStart, rsp, err)
 	if err != nil {
 		return errors.Join(err, errors.New("failed to get new certificate"))
 	}
