@@ -56,7 +56,9 @@ func (tp *KubernetesTokenProvider) GetIdentityForIP(ctx context.Context, ip stri
 		statusCode = 404
 	}
 
-	tp.trackApiCall(kubeAPIendpoint, metricPathIdentity, statusCode, requestStart)
+	_ = tp.metrics.TrackDuration(kubeAPIendpoint, metricPathIdentity, time.Since(requestStart))
+	_ = tp.metrics.TrackRequest(kubeAPIendpoint, metricPathIdentity, statusCode)
+
 	return id
 }
 
@@ -127,7 +129,7 @@ func (tp *KubernetesTokenProvider) getSignedRequestToken(requestTokenLifetime ti
 	// Additional audiences can be added to the subject only, which is the kubernetes sa token in this case.
 	// Our main audience is the workload identity provider.
 	oidcToken, err := tp.k8s.GetServiceAccountToken(ksa.name, ksa.namespace, requestTokenLifetime, audiences, ksa.owner, ctx)
-	tp.trackApiError(kubeAPIendpoint, metricPath, err, requestStart)
+	tp.metrics.TrackCallResponse(kubeAPIendpoint, metricPath, requestStart, nil, err)
 
 	if err != nil {
 		log.Error().Str("name", ksa.name).Str("namespace", ksa.namespace).Msg("Failed to get kubernetes service account token")
@@ -164,6 +166,6 @@ func (tp *KubernetesTokenProvider) getSignedRequestToken(requestTokenLifetime ti
 		},
 		nil, 2, ctx)
 
-	tp.trackApiResponse(shared.EndpointSTS, metricPath, rsp, requestStart)
+	tp.metrics.TrackCallResponse(shared.EndpointSTS, metricPath, requestStart, rsp, err)
 	return rsp, err
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/rs/zerolog/log"
 	kubernetes "github.com/trivago/go-kubernetes/v4"
-	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -117,17 +116,7 @@ func GetPodsFromKubelet(kubeletHost string, apiMetrics *shared.APIMetrics, ctx c
 		"Authorization": "Bearer " + token,
 	}, nil, 2, ctx)
 
-	status := 200
-	if err != nil {
-		status = -1
-		if httpErr, isHttpErr := err.(shared.ErrorWithStatus); isHttpErr {
-			status = httpErr.Code
-		}
-	}
-
-	_ = apiMetrics.TrackDuration(kubeAPIendpoint, metricPathPods, time.Since(requestStart))
-	_ = apiMetrics.TrackRequest(kubeAPIendpoint, metricPathPods, status)
-
+	apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathPods, requestStart, nil, err)
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
 	}
@@ -222,18 +211,8 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
 
 		requestStart := time.Now()
-		status := 200
-
 		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector, ctx)
-		if err != nil {
-			status = -1
-			if statusError, isStatusError := err.(*errors.StatusError); isStatusError {
-				status = int(statusError.ErrStatus.Code)
-			}
-		}
-
-		apiMetrics.TrackDuration(kubeAPIendpoint, metricPathPods, time.Since(requestStart))
-		apiMetrics.TrackRequest(kubeAPIendpoint, metricPathPods, status)
+		apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathPods, requestStart, nil, err)
 
 		if err != nil {
 			return nil, shared.WrapErrorf(err, "failed to get pods from kubernetes API")
@@ -303,18 +282,9 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 	// This produces less calls than getting the service account one-by-one for each pod,
 	// at the cost of longer processing time.
 	requestStart := time.Now()
-	status := 200
 
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
-	if err != nil {
-		status = -1
-		if statusError, isStatusError := err.(*errors.StatusError); isStatusError {
-			status = int(statusError.ErrStatus.Code)
-		}
-	}
-
-	apiMetrics.TrackDuration(kubeAPIendpoint, metricPathServiceAccounts, time.Since(requestStart))
-	apiMetrics.TrackRequest(kubeAPIendpoint, metricPathServiceAccounts, status)
+	apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathServiceAccounts, requestStart, nil, err)
 
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to get service accounts from kubernetes API")

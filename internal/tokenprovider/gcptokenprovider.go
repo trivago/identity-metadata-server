@@ -49,7 +49,7 @@ func (tp *GcpTokenProvider) GetAccessToken(ctx context.Context, tokenRequestToke
 			"Authorization": "Bearer " + tokenRequestToken.AccessToken,
 		}, nil, 2, ctx)
 
-	tp.trackApiResponse(shared.EndpointIAMCredentials, metricPath, accessTokenResponse, requestStart)
+	tp.metrics.TrackCallResponse(shared.EndpointIAMCredentials, metricPath, requestStart, accessTokenResponse, err)
 	if err != nil {
 		log.Error().Err(err).
 			Str("scopes", strings.Join(scopes, ",")).
@@ -119,7 +119,7 @@ func (tp *GcpTokenProvider) GetIdentityToken(ctx context.Context, tokenRequestTo
 			"Authorization": "Bearer " + tokenRequestToken.AccessToken,
 		}, nil, 2, ctx)
 
-	tp.trackApiResponse(shared.EndpointIAMCredentials, metricPath, identityTokenResponse, requestStart)
+	tp.metrics.TrackCallResponse(shared.EndpointIAMCredentials, metricPath, requestStart, identityTokenResponse, err)
 	if err != nil {
 		log.Error().Err(err).
 			Msg("Failed to call iam identity token endpoint")
@@ -155,39 +155,4 @@ func (tp *GcpTokenProvider) GetIdentityToken(ctx context.Context, tokenRequestTo
 	}
 
 	return &identityToken, nil
-}
-
-// trackApiResponse is a wrapper around trackApiCall that extracts the status code
-// from the http.Response unless it is nil.
-func (tp *GcpTokenProvider) trackApiResponse(endpoint, path string, rsp *http.Response, requestStart time.Time) {
-	statusCode := -1
-	if rsp != nil {
-		statusCode = rsp.StatusCode
-	}
-
-	tp.trackApiCall(endpoint, path, statusCode, requestStart)
-}
-
-// trackApiError is a wrapper around trackApiCall that extracts the status code
-// from the error if possible. No error will yield status code 200, an unknown error
-// will yield status code -1, and an error with a known status code will yield that code.
-func (tp *GcpTokenProvider) trackApiError(endpoint, path string, err error, requestStart time.Time) {
-	if err == nil {
-		tp.trackApiCall(endpoint, path, http.StatusOK, requestStart)
-	} else if httpErr, ok := err.(*shared.ErrorWithStatus); ok {
-		tp.trackApiCall(endpoint, path, httpErr.Code, requestStart)
-	} else {
-		tp.trackApiCall(endpoint, path, -1, requestStart)
-	}
-}
-
-// trackApiCall is a helper function to track the request duration and status code
-// for the given endpoint and path. If metrics are not initialized, it does nothing.
-func (tp *GcpTokenProvider) trackApiCall(endpoint, path string, statusCode int, requestStart time.Time) {
-	if tp.metrics == nil {
-		return
-	}
-
-	_ = tp.metrics.TrackDuration(endpoint, path, time.Since(requestStart))
-	_ = tp.metrics.TrackRequest(endpoint, path, statusCode)
 }

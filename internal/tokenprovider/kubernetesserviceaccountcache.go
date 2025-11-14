@@ -191,11 +191,10 @@ func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, pod ku
 	}
 
 	requestStart := time.Now()
-	statusCode := 200
-
 	serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace, ctx)
+	c.apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathServiceAccounts, requestStart, nil, err)
+
 	if err != nil {
-		statusCode = -1
 		log.Error().Err(err).
 			Str("pod", pod.GetName()).
 			Str("serviceAccount", ksa.name).
@@ -210,9 +209,6 @@ func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, pod ku
 				Msg("Failed to get gcp service account annotation")
 		}
 	}
-
-	_ = c.apiMetrics.TrackDuration(kubeAPIendpoint, metricPathServiceAccounts, time.Since(requestStart))
-	_ = c.apiMetrics.TrackRequest(kubeAPIendpoint, metricPathServiceAccounts, statusCode)
 
 	c.data[podIP] = ksa
 	return ksa

@@ -2,6 +2,7 @@ package shared
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
+	"k8s.io/apimachinery/pkg/api/errors"
 )
 
 type APIMetrics struct {
@@ -70,6 +72,7 @@ func (a *APIMetrics) TrackRequest(endpoint, path string, status int) error {
 		a.endpointRequestCount[subsystem] = counter
 	}
 
+	log.Debug().Msgf("Registered counter value for %s_%s{path=\"%s\", status=\"%d\"}", a.namespace, subsystem, path, status)
 	counter.WithLabelValues(strconv.Itoa(status), path).Inc()
 	return nil
 }
@@ -102,7 +105,32 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 	}
 
 	histogram.WithLabelValues(path).Observe(d.Seconds())
+	log.Debug().Msgf("Registered histogram value for %s_%s{path=\"%s\"}", a.namespace, subsystem, path)
 	return nil
+}
+
+// TrackCallResponse tracks both the duration and the status code of an API call.
+// It extracts the status code from the http.Response if available, or from the error if not.
+// If neither is available, it assumes a status code of 200 for no error, or -1 for an unknown error.
+func (a *APIMetrics) TrackCallResponse(endpoint, path string, requestStart time.Time, rsp *http.Response, err error) {
+	statusCode := 200
+
+	switch {
+	case rsp != nil:
+		statusCode = rsp.StatusCode
+	case err != nil:
+		switch typedErr := err.(type) {
+		case *ErrorWithStatus:
+			statusCode = typedErr.Code
+		case *errors.StatusError:
+			statusCode = int(typedErr.ErrStatus.Code)
+		default:
+			statusCode = -1
+		}
+	}
+
+	_ = a.TrackDuration(endpoint, path, time.Since(requestStart))
+	_ = a.TrackRequest(endpoint, path, statusCode)
 }
 
 // RegisterCollectorOrUseExisting registers a Prometheus collector.
