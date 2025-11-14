@@ -19,7 +19,7 @@ type APIMetrics struct {
 
 	namespace            string
 	endpointRequestCount map[string]*prometheus.CounterVec
-	endpointLatencySec   map[string]prometheus.Histogram
+	endpointLatencySec   map[string]*prometheus.HistogramVec
 	commonLabels         map[string]string
 }
 
@@ -28,7 +28,7 @@ func NewAPIMetrics(namespace string, commonLabels map[string]string) *APIMetrics
 		guard:                 &sync.Mutex{},
 		invalidSubsystemChars: regexp.MustCompilePOSIX(`[/.-]`),
 		endpointRequestCount:  make(map[string]*prometheus.CounterVec),
-		endpointLatencySec:    make(map[string]prometheus.Histogram),
+		endpointLatencySec:    make(map[string]*prometheus.HistogramVec),
 		namespace:             namespace,
 		commonLabels:          commonLabels,
 	}
@@ -84,14 +84,14 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 
 	histogram, ok := a.endpointLatencySec[subsystem]
 	if !ok {
-		histogram = prometheus.NewHistogram(prometheus.HistogramOpts{
+		histogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace:   a.namespace,
 			Subsystem:   subsystem,
 			Name:        "request_duration_seconds",
 			Help:        fmt.Sprintf("Duration of requests to the %s API endpoint.", endpoint),
 			ConstLabels: a.commonLabels,
 			Buckets:     []float64{0.005, 0.01, 0.025, 0.050, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3},
-		})
+		}, []string{"path"})
 
 		if err := RegisterCollectorOrUseExisting(&histogram); err != nil {
 			log.Warn().Err(err).Msgf("Failed to register request duration for endpoint %s, metrics will not be available", endpoint)
@@ -101,7 +101,7 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 		a.endpointLatencySec[subsystem] = histogram
 	}
 
-	histogram.Observe(d.Seconds())
+	histogram.WithLabelValues(path).Observe(d.Seconds())
 	return nil
 }
 
