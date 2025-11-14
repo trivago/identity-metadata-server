@@ -49,7 +49,7 @@ func (tp *GcpTokenProvider) GetAccessToken(ctx context.Context, tokenRequestToke
 			"Authorization": "Bearer " + tokenRequestToken.AccessToken,
 		}, nil, 2, ctx)
 
-	tp.metrics.TrackCallResponse(shared.EndpointIAMCredentials, metricPath, requestStart, accessTokenResponse, err)
+	tp.TrackCallResponse(shared.EndpointIAMCredentials, metricPath, requestStart, accessTokenResponse, err)
 	if err != nil {
 		log.Error().Err(err).
 			Str("scopes", strings.Join(scopes, ",")).
@@ -119,7 +119,7 @@ func (tp *GcpTokenProvider) GetIdentityToken(ctx context.Context, tokenRequestTo
 			"Authorization": "Bearer " + tokenRequestToken.AccessToken,
 		}, nil, 2, ctx)
 
-	tp.metrics.TrackCallResponse(shared.EndpointIAMCredentials, metricPath, requestStart, identityTokenResponse, err)
+	tp.TrackCallResponse(shared.EndpointIAMCredentials, metricPath, requestStart, identityTokenResponse, err)
 	if err != nil {
 		log.Error().Err(err).
 			Msg("Failed to call iam identity token endpoint")
@@ -155,4 +155,13 @@ func (tp *GcpTokenProvider) GetIdentityToken(ctx context.Context, tokenRequestTo
 	}
 
 	return &identityToken, nil
+}
+
+// TrackCallResponse tracks both the duration and the status code of an API call.
+// It's a wrapper around the APIMetrics TrackCallResponse method but checks for
+// nil metrics.
+func (tp *GcpTokenProvider) TrackCallResponse(endpoint, path string, requestStart time.Time, rsp *http.Response, err error) {
+	if tp.metrics != nil {
+		tp.metrics.TrackCallResponse(endpoint, path, requestStart, rsp, err)
+	}
 }
