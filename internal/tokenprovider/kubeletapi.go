@@ -282,8 +282,10 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 	}
 
 	// Get _all_ service accounts on the cluster.
-	// This produces less calls than getting the service account one-by-one for each pod,
-	// at the cost of longer processing time.
+	// This produces fewer API calls than fetching the service account for each pod individually,
+	// but can be expensive in clusters with many service accounts. In large clusters, this may
+	// result in significant memory usage and increased API server load. Consider the trade-off
+	// carefully and monitor performance if running in a large environment.
 	requestStart := time.Now()
 
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
@@ -318,14 +320,14 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 		}
 
 		if len(info.boundGSA) == 0 {
-			log.Error().
+			log.Warn().
 				Str("serviceAccount", info.name).
 				Str("namespace", info.namespace).
-				Msg("Failed to get gcp service account annotation")
+				Msg("Missing gcp service account annotation; skipping pod")
+			continue
 		}
 
 		results[pod.Status.PodIP] = info
-	}
 
 	return results, nil
 }

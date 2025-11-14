@@ -144,7 +144,7 @@ func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, podList *Ku
 	for foundPodIP, foundPodInfo := range foundPods {
 		if cachedInfo, isKnown := c.data[foundPodIP]; isKnown {
 			// Do not refresh up-to-date entries
-			if cachedInfo.Equal(foundPodInfo) && time.Since(cachedInfo.firstSeen) < c.ttl {
+			if time.Since(cachedInfo.firstSeen) < c.ttl && cachedInfo.Equal(foundPodInfo) {
 				continue
 			}
 		}

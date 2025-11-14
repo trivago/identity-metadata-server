@@ -111,7 +111,7 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 // It extracts the status code from the http.Response if available, or from the error if not.
 // If neither is available, it assumes a status code of 200 for no error, or -1 for an unknown error.
 func (a *APIMetrics) TrackCallResponse(endpoint, path string, requestStart time.Time, rsp *http.Response, err error) {
-	statusCode := 200
+	statusCode := http.StatusOK
 
 	switch {
 	case rsp != nil:
