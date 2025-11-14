@@ -286,6 +286,8 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 	// but can be expensive in clusters with many service accounts. In large clusters, this may
 	// result in significant memory usage and increased API server load. Consider the trade-off
 	// carefully and monitor performance if running in a large environment.
+	//
+	// TODO: We can could cache this call and update the cache via webhook.
 	requestStart := time.Now()
 
 	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
@@ -324,10 +326,11 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 				Str("serviceAccount", info.name).
 				Str("namespace", info.namespace).
 				Msg("Missing gcp service account annotation; skipping pod")
-			continue
+			// we add the pod still, as it will otherwise result in
+			// a "pod not found" and repeated cache misses.
 		}
 
 		results[pod.Status.PodIP] = info
-
+	}
 	return results, nil
 }
