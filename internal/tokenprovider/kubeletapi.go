@@ -330,7 +330,6 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 		}
 
 		// Find the service account for this pod and extract the bound GSA annotation
-
 		for _, sa := range serviceAccounts {
 			if sa.GetNamespace() != info.namespace {
 				continue
@@ -346,7 +345,10 @@ func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podLis
 		}
 
 		if len(info.boundGSA) == 0 {
-			continue // No bound GSA found
+			log.Error().
+				Str("serviceAccount", info.name).
+				Str("namespace", info.namespace).
+				Msg("Failed to get gcp service account annotation")
 		}
 
 		results[pod.Status.PodIP] = info

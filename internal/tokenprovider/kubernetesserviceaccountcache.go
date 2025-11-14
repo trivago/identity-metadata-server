@@ -99,6 +99,7 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 		}
 
 		if err == nil && pod != nil && info.IsOwnedBy(pod) {
+			log.Debug().Msg("Extending cached service account info for existing pod")
 			info.firstSeen = time.Now()
 			c.data[podIP] = info
 			c.hitMetric.Inc()
@@ -131,6 +132,15 @@ func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, podList *Ku
 		return kubernetesServiceAccountInfo{}
 	}
 
+	// Clean up stale entries. As we have the full list of pods from the kubelet,
+	// we can remove any entries that are not present anymore.
+	for ip := range c.data {
+		if _, foundOnNode := foundPods[ip]; !foundOnNode {
+			delete(c.data, ip)
+			continue
+		}
+	}
+
 	for foundPodIP, foundPodInfo := range foundPods {
 		if cachedInfo, isKnown := c.data[foundPodIP]; isKnown {
 			// Do not refresh up-to-date entries
@@ -142,18 +152,11 @@ func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, podList *Ku
 		c.data[foundPodIP] = foundPodInfo
 	}
 
-	// Clean up stale entries. As we have the full list of pods from the kubelet,
-	// we can remove any entries that are not present anymore.
-	for ip := range c.data {
-		if _, foundOnNode := foundPods[ip]; !foundOnNode {
-			delete(c.data, ip)
-			continue
-		}
-	}
-
 	if info, ok := c.data[podIP]; ok {
 		return info
 	}
+
+	log.Error().Str("podIP", podIP).Msg("Failed to get pod for IP")
 	return kubernetesServiceAccountInfo{}
 }
 
