@@ -63,15 +63,3 @@ jobs:
           VERSION="$(just version "${{ matrix.target }}")-test-${{ github.run_number }}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           just build-multiarch "${{ matrix.target }}" "${VERSION}" --push
-
-      - name: 'Comment published image'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # ratchet:actions/github-script@v8
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '### Published test image\n\n`ghcr.io/' + context.repo.owner + '/' + context.repo.repo + '/${{ matrix.target }}:${{steps.build.outputs['version']}}`'
-            })
