@@ -7,10 +7,10 @@ rules:
   verbs: ['get', 'list']
   resources:
   - 'pods'
+  - 'serviceaccounts'
 - apiGroups: ['']
   verbs: ['get']
   resources:
-  - 'serviceaccounts'
   - 'nodes/proxy'
 - apiGroups: ['']
   verbs: ['create']
