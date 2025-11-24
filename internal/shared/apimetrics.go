@@ -15,6 +15,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 )
 
+const (
+	// StatusCodeUnknown is used when the status code of a request cannot be determined.
+	StatusCodeUnknown = -1
+)
+
 type APIMetrics struct {
 	guard                 *sync.Mutex
 	invalidSubsystemChars *regexp.Regexp
@@ -123,7 +128,7 @@ func (a *APIMetrics) TrackCallResponse(endpoint, path string, requestStart time.
 		case *errors.StatusError:
 			statusCode = int(typedErr.ErrStatus.Code)
 		default:
-			statusCode = -1
+			statusCode = StatusCodeUnknown
 		}
 	}
 
