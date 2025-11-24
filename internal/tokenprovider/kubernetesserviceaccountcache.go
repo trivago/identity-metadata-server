@@ -21,11 +21,12 @@ type KubernetesServiceAccountCache struct {
 	hitMetric   prometheus.Counter
 	missMetric  prometheus.Counter
 	kubeletHost string
+	apiMetrics  *shared.APIMetrics
 }
 
 // NewKubernetesServiceAccountCache creates a new service account cache with a given TTL
 // for times stored inside the cache.
-func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost string, ttl time.Duration) *KubernetesServiceAccountCache {
+func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost string, ttl time.Duration, apiMetrics *shared.APIMetrics) *KubernetesServiceAccountCache {
 	hitMetric := prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace:   "metadata_server",
 		Subsystem:   "serviceaccount_cache",
@@ -56,6 +57,7 @@ func NewKubernetesServiceAccountCache(client *kubernetes.Client, kubeletHost str
 		hitMetric:   hitMetric,
 		missMetric:  missMetric,
 		kubeletHost: kubeletHost,
+		apiMetrics:  apiMetrics,
 	}
 }
 
@@ -68,9 +70,12 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	info, isKnown := c.data[podIP]
+	var (
+		pod     kubernetes.NamedObject
+		podList *KubeletPodList
+	)
 
-	if isKnown {
+	if info, isKnown := c.data[podIP]; isKnown {
 		// TODO: This is a bit dangerous for very shortlived pods.
 		//       As far as I know, kubernetes pod IPs take some time to be recycled,
 		//       not only because pods take some time to shot down/spin up, but this
@@ -82,27 +87,92 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 			c.hitMetric.Inc()
 			return info
 		}
+
+		// We can extend the cache entry past TTL by verifying that the pod still exists
+		// and is owned by the same service account. Best case this will result in 1
+		// api call instead of 2 for every request after TTL.
+		var err error
+		if len(c.kubeletHost) > 0 {
+			pod, podList, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 0, c.apiMetrics, ctx)
+		} else {
+			pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 0, c.apiMetrics, ctx)
+		}
+
+		if err == nil && pod != nil && info.IsOwnedBy(pod) {
+			log.Debug().Msg("Extending cached service account info for existing pod")
+			info.firstSeen = time.Now()
+			c.data[podIP] = info
+			c.hitMetric.Inc()
+			return info
+		}
+
 		delete(c.data, podIP)
 	}
 
 	c.missMetric.Inc()
 
-	var (
-		pod kubernetes.NamedObject
-		err error
-	)
-
 	// If kubeletHost is set, we will try to get the pod from the kubelet API.
 	// Otherwise, we will try to get the pod from the control plane API.
 	if len(c.kubeletHost) > 0 {
-		pod, err = GetPodByIPviaKubelet(c.kubeletHost, podIP, 3, ctx)
-	} else {
-		pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 3, ctx)
+		return c.getFromKubelet(podIP, podList, ctx)
 	}
 
-	if err != nil || pod == nil {
-		log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pod for IP")
+	return c.getFromControlPlane(podIP, pod, ctx)
+}
+
+// getFromKubelet retrieves the service account information for the given pod IP
+// by querying the kubelet API.
+// If the pod or service account cannot be found, an empty kubernetesServiceAccountInfo
+// will be returned.
+func (c *KubernetesServiceAccountCache) getFromKubelet(podIP string, podList *KubeletPodList, ctx context.Context) kubernetesServiceAccountInfo {
+	// The caller may pass a podlist from a previous call to avoid querying the kubelet twice.
+	foundPods, err := GetAllPodsFromKubelet(c.kubeletHost, c.k8s, podList, c.apiMetrics, ctx)
+	if err != nil {
+		log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pods from kubelet")
 		return kubernetesServiceAccountInfo{}
+	}
+
+	// Clean up stale entries. As we have the full list of pods from the kubelet,
+	// we can remove any entries that are not present anymore.
+	for ip := range c.data {
+		if _, foundOnNode := foundPods[ip]; !foundOnNode {
+			delete(c.data, ip)
+			continue
+		}
+	}
+
+	for foundPodIP, foundPodInfo := range foundPods {
+		if cachedInfo, isKnown := c.data[foundPodIP]; isKnown {
+			// Do not refresh up-to-date entries
+			if time.Since(cachedInfo.firstSeen) < c.ttl && cachedInfo.Equal(foundPodInfo) {
+				continue
+			}
+		}
+		// Not known or outdated, store/update it
+		c.data[foundPodIP] = foundPodInfo
+	}
+
+	if info, ok := c.data[podIP]; ok {
+		return info
+	}
+
+	log.Error().Str("podIP", podIP).Msg("Failed to get pod for IP")
+	return kubernetesServiceAccountInfo{}
+}
+
+// getFromControlPlane retrieves the service account information for the given pod IP
+// by querying the control plane API.
+// If the pod or service account cannot be found, an empty kubernetesServiceAccountInfo
+// will be returned.
+func (c *KubernetesServiceAccountCache) getFromControlPlane(podIP string, pod kubernetes.NamedObject, ctx context.Context) kubernetesServiceAccountInfo {
+	// The caller may pass a pod object from a previous call to avoid querying the control plane twice.
+	if pod == nil {
+		var err error
+		pod, err = GetPodByIPviaControlPlane(c.k8s, podIP, 3, c.apiMetrics, ctx)
+		if err != nil || pod == nil {
+			log.Error().Err(err).Str("podIP", podIP).Msg("Failed to get pod for IP")
+			return kubernetesServiceAccountInfo{}
+		}
 	}
 
 	// Retrieve service account name from pod. If not found, default to "default", which
@@ -120,7 +190,11 @@ func (c *KubernetesServiceAccountCache) Get(podIP string, ctx context.Context) k
 		name:      serviceAccountName,
 	}
 
-	if serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace, ctx); err != nil {
+	requestStart := time.Now()
+	serviceAccount, err := c.k8s.GetNamespacedObject(kubernetes.ResourceServiceAccount, ksa.name, ksa.namespace, ctx)
+	c.apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathServiceAccounts, requestStart, nil, err)
+
+	if err != nil {
 		log.Error().Err(err).
 			Str("pod", pod.GetName()).
 			Str("serviceAccount", ksa.name).

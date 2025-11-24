@@ -42,3 +42,11 @@ func (ksa kubernetesServiceAccountInfo) Equal(other SourceIdentity) bool {
 		ksa.namespace == ksa2.namespace &&
 		ksa.boundGSA == ksa2.boundGSA
 }
+
+// IsOwnedBy checks if this object is owned by the given kubernetes object.
+func (ksa kubernetesServiceAccountInfo) IsOwnedBy(obj kubernetes.NamedObject) bool {
+	return ksa.owner != nil && obj != nil &&
+		ksa.owner.GetKind() == obj.GetKind() &&
+		ksa.owner.GetName() == obj.GetName() &&
+		ksa.owner.GetNamespace() == obj.GetNamespace()
+}

@@ -2,6 +2,7 @@ package shared
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -11,6 +12,12 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/rs/zerolog/log"
+	"k8s.io/apimachinery/pkg/api/errors"
+)
+
+const (
+	// StatusCodeUnknown is used when the status code of a request cannot be determined.
+	StatusCodeUnknown = -1
 )
 
 type APIMetrics struct {
@@ -19,7 +26,7 @@ type APIMetrics struct {
 
 	namespace            string
 	endpointRequestCount map[string]*prometheus.CounterVec
-	endpointLatencySec   map[string]prometheus.Histogram
+	endpointLatencySec   map[string]*prometheus.HistogramVec
 	commonLabels         map[string]string
 }
 
@@ -28,7 +35,7 @@ func NewAPIMetrics(namespace string, commonLabels map[string]string) *APIMetrics
 		guard:                 &sync.Mutex{},
 		invalidSubsystemChars: regexp.MustCompilePOSIX(`[/.-]`),
 		endpointRequestCount:  make(map[string]*prometheus.CounterVec),
-		endpointLatencySec:    make(map[string]prometheus.Histogram),
+		endpointLatencySec:    make(map[string]*prometheus.HistogramVec),
 		namespace:             namespace,
 		commonLabels:          commonLabels,
 	}
@@ -84,14 +91,14 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 
 	histogram, ok := a.endpointLatencySec[subsystem]
 	if !ok {
-		histogram = prometheus.NewHistogram(prometheus.HistogramOpts{
+		histogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace:   a.namespace,
 			Subsystem:   subsystem,
 			Name:        "request_duration_seconds",
 			Help:        fmt.Sprintf("Duration of requests to the %s API endpoint.", endpoint),
 			ConstLabels: a.commonLabels,
-			Buckets:     []float64{0.005, 0.01, 0.025, 0.050, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3},
-		})
+			Buckets:     []float64{0.005, 0.01, 0.025, 0.050, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3, 5},
+		}, []string{"path"})
 
 		if err := RegisterCollectorOrUseExisting(&histogram); err != nil {
 			log.Warn().Err(err).Msgf("Failed to register request duration for endpoint %s, metrics will not be available", endpoint)
@@ -101,8 +108,32 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 		a.endpointLatencySec[subsystem] = histogram
 	}
 
-	histogram.Observe(d.Seconds())
+	histogram.WithLabelValues(path).Observe(d.Seconds())
 	return nil
+}
+
+// TrackCallResponse tracks both the duration and the status code of an API call.
+// It extracts the status code from the http.Response if available, or from the error if not.
+// If neither is available, it assumes a status code of 200 for no error, or -1 for an unknown error.
+func (a *APIMetrics) TrackCallResponse(endpoint, path string, requestStart time.Time, rsp *http.Response, err error) {
+	statusCode := http.StatusOK
+
+	switch {
+	case rsp != nil:
+		statusCode = rsp.StatusCode
+	case err != nil:
+		switch typedErr := err.(type) {
+		case *ErrorWithStatus:
+			statusCode = typedErr.Code
+		case *errors.StatusError:
+			statusCode = int(typedErr.ErrStatus.Code)
+		default:
+			statusCode = StatusCodeUnknown
+		}
+	}
+
+	_ = a.TrackDuration(endpoint, path, time.Since(requestStart))
+	_ = a.TrackRequest(endpoint, path, statusCode)
 }
 
 // RegisterCollectorOrUseExisting registers a Prometheus collector.

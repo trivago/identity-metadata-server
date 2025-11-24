@@ -13,6 +13,11 @@ import (
 	kubernetes "github.com/trivago/go-kubernetes/v4"
 )
 
+const (
+	metricPathPods            = "pods"
+	metricPathServiceAccounts = "serviceaccounts"
+)
+
 type KubeletPodInfo struct {
 	Metadata struct {
 		Name      string `json:"name"`
@@ -89,6 +94,9 @@ func GetServiceAccountToken() (string, error) {
 
 	if err == nil {
 		serviceAccountToken = strings.TrimSpace(string(token))
+		if len(serviceAccountToken) == 0 {
+			return "", fmt.Errorf("service account token is empty")
+		}
 		return serviceAccountToken, nil
 	}
 	return "", err
@@ -98,18 +106,20 @@ func GetServiceAccountToken() (string, error) {
 // The service account needs to have a ClusterRole bound that allows "get" on "nodes/proxy".
 // The kubelet API is typically available at https://localhost:10250 when the pod is running
 // in host network mode.
-func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodList, error) {
+func GetPodsFromKubelet(kubeletHost string, apiMetrics *shared.APIMetrics, ctx context.Context) (*KubeletPodList, error) {
 	token, err := GetServiceAccountToken()
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to read service account token from disk")
 	}
 
+	requestStart := time.Now()
 	pods, err := shared.HttpGETJson[KubeletPodList](kubeletHost+"/pods", nil, map[string]string{
 		"Accept":        "application/json",
 		"User-Agent":    "metadata-server",
 		"Authorization": "Bearer " + token,
 	}, nil, 2, ctx)
 
+	apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathPods, requestStart, nil, err)
 	if err != nil {
 		return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
 	}
@@ -120,28 +130,31 @@ func GetPodsFromKubelet(kubeletHost string, ctx context.Context) (*KubeletPodLis
 // GetPodByIPviaKubelet retrieves the pod object for a given pod IP.
 // If no pod is found, it will retry up to `retries` times with a
 // linearly increasing delay.
-func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx context.Context) (kubernetes.NamedObject, error) {
+// If the call to the kublet API succeeded and at least one pod was found, the
+// returned KubeletPodList can be used to avoid querying the kubelet API again.
+func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, apiMetrics *shared.APIMetrics, ctx context.Context) (kubernetes.NamedObject, *KubeletPodList, error) {
 	if retries < 0 {
-		return nil, fmt.Errorf("retries must be 0 or greater")
+		return nil, nil, fmt.Errorf("retries must be 0 or greater")
 	}
+
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
-		pods, err := GetPodsFromKubelet(kubeletHost, ctx)
+		podList, err := GetPodsFromKubelet(kubeletHost, apiMetrics, ctx)
 		if err != nil {
-			return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
+			return nil, nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
 		}
 
-		if len(pods.Items) == 0 {
+		if len(podList.Items) == 0 {
 			// As this process is running as a pod, something must be wrong with the kubelet API.
-			return nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
+			return nil, nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
 		}
 
-		candidates := make([]*KubeletPodInfo, 0, len(pods.Items))
-		for idx, pod := range pods.Items {
+		candidates := make([]*KubeletPodInfo, 0, len(podList.Items))
+		for idx, pod := range podList.Items {
 			// We also need to check "pending" pods to support InitContainers, too.
 			if pod.Status.PodIP == podIP && (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") {
 				// Note: We could early out here, but we need to properly react on
 				// ambiguous lookups, i.e. multiple pods with the same IP.
-				candidates = append(candidates, &(pods.Items[idx]))
+				candidates = append(candidates, &(podList.Items[idx]))
 			}
 		}
 
@@ -151,14 +164,14 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 
 			select {
 			case <-ctx.Done():
-				return nil, shared.WrapErrorf(ctx.Err(), "No pod found for IP %s", podIP)
+				return nil, podList, shared.WrapErrorf(ctx.Err(), "No pod found for IP %s", podIP)
 			case <-time.After(200 * time.Duration(tryCounter) * time.Millisecond):
 			}
 
 			continue // Retry if no pod was found
 
 		case 1:
-			return candidates[0].NamedObject(), nil
+			return candidates[0].NamedObject(), podList, nil
 
 		default:
 			// Note: Resolving multiple pods for the same IP is tricky.
@@ -173,17 +186,17 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 			// node is using host networking, as they all share the same host IP.
 			// We log this as a seprate error, as it's a known issue.
 			if podIP == candidates[0].Status.HostIP {
-				return nil, fmt.Errorf("multiple pods found using host networking. This is ambiguous and cannot be resolved properly")
+				return nil, podList, fmt.Errorf("multiple pods found using host networking. This is ambiguous and cannot be resolved properly")
 			}
 
 			// There should not be multiple pods with the same IP (except for host networking).
 			// If there were, routing would not work properly, as the IP is used to route traffic to the pod.
 			// As we test for the status phase, we should never end up here.
-			return nil, fmt.Errorf("%d pods found for IP %s. This is ambiguous and cannot be resolved properly", len(candidates), podIP)
+			return nil, podList, fmt.Errorf("%d pods found for IP %s. This is ambiguous and cannot be resolved properly", len(candidates), podIP)
 		}
 	}
 
-	return nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
+	return nil, nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
 }
 
 // GetPodByIPviaControlPlane retrieves the pod object for a given pod IP.
@@ -192,7 +205,7 @@ func GetPodByIPviaKubelet(kubeletHost string, podIP string, retries int, ctx con
 // available and does not require the pod to be running on the same node as the
 // metadata server.
 // It will retry a few times in case the pod is not found yet.
-func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries int, ctx context.Context) (kubernetes.NamedObject, error) {
+func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries int, apiMetrics *shared.APIMetrics, ctx context.Context) (kubernetes.NamedObject, error) {
 	if retries < 0 {
 		return nil, fmt.Errorf("retries must be 0 or greater")
 	}
@@ -200,7 +213,10 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 	fieldSelector := fmt.Sprintf("status.podIP==%s,status.phase!=Succeeded,status.phase!=Failed,status.phase!=Unknown", podIP)
 	for tryCounter := 1; tryCounter <= retries+1; tryCounter++ {
 
+		requestStart := time.Now()
 		candidates, err := client.ListAllObjects(kubernetes.ResourcePod, "", fieldSelector, ctx)
+		apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathPods, requestStart, nil, err)
+
 		if err != nil {
 			return nil, shared.WrapErrorf(err, "failed to get pods from kubernetes API")
 		}
@@ -228,4 +244,93 @@ func GetPodByIPviaControlPlane(client *kubernetes.Client, podIP string, retries 
 	}
 
 	return nil, fmt.Errorf("no pod found for IP %s after %d tries", podIP, retries)
+}
+
+// GetAllPodsFromKubelet retrieves all pods from the kubelet API and their associated service accounts.
+// It returns a list of kubernetesServiceAccountInfo objects for pods that have a bound GSA annotation.
+// You can provide a previously retrieved podList to avoid querying the kubelet API again.
+func GetAllPodsFromKubelet(kubeletHost string, client *kubernetes.Client, podList *KubeletPodList, apiMetrics *shared.APIMetrics, ctx context.Context) (map[string]kubernetesServiceAccountInfo, error) {
+	if podList == nil {
+		var err error
+		podList, err = GetPodsFromKubelet(kubeletHost, apiMetrics, ctx)
+		if err != nil {
+			return nil, shared.WrapErrorf(err, "failed to get pods from kubelet API")
+		}
+	}
+
+	if len(podList.Items) == 0 {
+		// As this process is running as a pod, something must be wrong with the kubelet API.
+		return nil, fmt.Errorf("failed to get pods from kubelet API. This might be a permissions issue or the kubelet API is not reachable")
+	}
+
+	pods := make([]KubeletPodInfo, 0, len(podList.Items))
+	for _, pod := range podList.Items {
+		// Filter and adjust pod information
+		if (pod.Status.Phase == "Running" || pod.Status.Phase == "Pending") &&
+			len(pod.Status.PodIP) > 0 &&
+			pod.Status.PodIP != pod.Status.HostIP {
+
+			if len(pod.Spec.ServiceAccountName) == 0 {
+				pod.Spec.ServiceAccountName = "default" // Default service account
+			}
+			pods = append(pods, pod)
+		}
+	}
+
+	if len(pods) == 0 {
+		return nil, fmt.Errorf("no valid pods returned from kubelet API")
+	}
+
+	// Get _all_ service accounts on the cluster.
+	// This produces fewer API calls than fetching the service account for each pod individually,
+	// but can be expensive in clusters with many service accounts. In large clusters, this may
+	// result in significant memory usage and increased API server load. Consider the trade-off
+	// carefully and monitor performance if running in a large environment.
+	//
+	// TODO: We can could cache this call and update the cache via webhook.
+	requestStart := time.Now()
+
+	serviceAccounts, err := client.ListAllObjects(kubernetes.ResourceServiceAccount, "", "", ctx)
+	apiMetrics.TrackCallResponse(kubeAPIendpoint, metricPathServiceAccounts, requestStart, nil, err)
+
+	if err != nil {
+		return nil, shared.WrapErrorf(err, "failed to get service accounts from kubernetes API")
+	}
+
+	results := make(map[string]kubernetesServiceAccountInfo, len(pods))
+	for _, pod := range pods {
+		info := kubernetesServiceAccountInfo{
+			name:      pod.Spec.ServiceAccountName,
+			namespace: pod.Metadata.Namespace,
+			owner:     pod.NamedObject(),
+			firstSeen: time.Now(),
+		}
+
+		// Find the service account for this pod and extract the bound GSA annotation
+		for _, sa := range serviceAccounts {
+			if sa.GetNamespace() != info.namespace {
+				continue
+			}
+			if sa.GetName() != info.name {
+				continue
+			}
+
+			// We can ignore the error here, as we know the annotation might not be set
+			// In that case, we just skip this service account in the check below.
+			info.boundGSA, _ = sa.GetAnnotation("iam.gke.io/gcp-service-account")
+			break
+		}
+
+		if len(info.boundGSA) == 0 {
+			log.Warn().
+				Str("serviceAccount", info.name).
+				Str("namespace", info.namespace).
+				Msg("Missing gcp service account annotation; skipping pod")
+			// we add the pod still, as it will otherwise result in
+			// a "pod not found" and repeated cache misses.
+		}
+
+		results[pod.Status.PodIP] = info
+	}
+	return results, nil
 }
