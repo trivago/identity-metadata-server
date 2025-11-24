@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.8.0](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.7.1...metadata-server-3.8.0) (2025-11-24)
+
+
+### Features
+
+* fine-grained kubernetes api metrics ([8ae6c65](https://github.com/trivago/identity-metadata-server/commit/8ae6c6514e79ee960448f72572e6c77dccb5efc2))
+
+
+### Bug Fixes
+
+* fetch all pods on cache miss (kubelet mode) ([#9](https://github.com/trivago/identity-metadata-server/issues/9)) ([8ae6c65](https://github.com/trivago/identity-metadata-server/commit/8ae6c6514e79ee960448f72572e6c77dccb5efc2))
+
 ## [3.7.1](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.7.0...metadata-server-3.7.1) (2025-11-13)
 
 
