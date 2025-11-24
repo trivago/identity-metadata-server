@@ -97,7 +97,7 @@ func (a *APIMetrics) TrackDuration(endpoint, path string, d time.Duration) error
 			Name:        "request_duration_seconds",
 			Help:        fmt.Sprintf("Duration of requests to the %s API endpoint.", endpoint),
 			ConstLabels: a.commonLabels,
-			Buckets:     []float64{0.005, 0.01, 0.025, 0.050, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3},
+			Buckets:     []float64{0.005, 0.01, 0.025, 0.050, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1, 1.5, 2, 3, 5},
 		}, []string{"path"})
 
 		if err := RegisterCollectorOrUseExisting(&histogram); err != nil {
