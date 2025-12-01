@@ -17,7 +17,7 @@ require (
 	github.com/trivago/go-bootstrap v1.3.1
 	github.com/trivago/go-kubernetes/v4 v4.1.0
 	golang.org/x/net v0.47.0
-	k8s.io/apimachinery v0.34.1
+	k8s.io/apimachinery v0.34.2
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 )
 
