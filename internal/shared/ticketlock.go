@@ -16,6 +16,11 @@ type TicketLock struct {
 	ticketGuard     *sync.Mutex
 }
 
+// NewTicketLock creates a new ticket lock with the given granularity.
+// The granularity is the time to wait between each lock acquisition check.
+// The granularity should be small enough to not block the main thread for too
+// long, but large enough to not waste too much time.
+// A granularity of 5-10 milliseconds is a good starting point.
 func NewTicketLock(granularity time.Duration) *TicketLock {
 	return &TicketLock{
 		nextTicket:      1,
