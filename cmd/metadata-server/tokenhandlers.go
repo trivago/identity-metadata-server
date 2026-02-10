@@ -74,6 +74,7 @@ func HandleGetAccessToken(c *gin.Context) {
 	// Block inflight requests for the same tokenID
 	inflightLock := knownTokens.GetTokenLock(tokenID)
 	if inflightLock.LockWithContext(c.Request.Context()) == 0 {
+		c.Header("Retry-After", "5")
 		shared.HttpError(c, http.StatusTooManyRequests, errors.New("timed out while waiting for another token fetch to finish"))
 		return
 	}
