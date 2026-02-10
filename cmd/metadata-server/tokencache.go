@@ -25,6 +25,8 @@ type TokenCache struct {
 	hitMetric        prometheus.Counter
 	missMetric       prometheus.Counter
 	setMetric        prometheus.Counter
+
+	inflight map[TokenUID]*shared.TicketLock
 }
 
 // NewTokenCache creates a new token cache with a garbage collection interval.
@@ -68,6 +70,7 @@ func NewTokenCache(gcInterval, minLifetime time.Duration) *TokenCache {
 		hitMetric:        hitMetric,
 		missMetric:       missMetric,
 		setMetric:        setMetric,
+		inflight:         make(map[TokenUID]*shared.TicketLock),
 	}
 
 	if gcInterval > 0 {
@@ -84,6 +87,21 @@ func NewTokenCache(gcInterval, minLifetime time.Duration) *TokenCache {
 	}
 
 	return cache
+}
+
+// GetTokenLock returns a ticket lock for the given token identifier.
+// The lock can be used to prevent multiple parallel requests for the same token.
+func (t *TokenCache) GetTokenLock(tokenIdentifier TokenLookup) *shared.TicketLock {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	id := tokenIdentifier.ToTokenUID()
+	lock, ok := t.inflight[id]
+	if !ok {
+		lock = shared.NewTicketLock(10 * time.Millisecond)
+		t.inflight[id] = lock
+	}
+	return lock
 }
 
 // StopGC stops the garbage collection timer.

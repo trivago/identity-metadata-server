@@ -32,8 +32,9 @@ func (l *TicketLock) Lock() uint64 {
 }
 
 // LockWithContext tries to aquire a lock in a FIFO way.
-// It returns true if the lock was acquired, false if the context was cancelled
-// while waiting for the lock.
+// It returns 0 when the lock failed to be acquired due to a context
+// cancellation or a timeout.
+// if the lock was acquired, it returns the ticket number of the lock.
 func (l *TicketLock) LockWithContext(ctx context.Context) uint64 {
 	ticket := atomic.AddUint64(&l.nextTicket, 1) - 1
 
@@ -47,18 +48,15 @@ func (l *TicketLock) LockWithContext(ctx context.Context) uint64 {
 			continue
 
 		case <-ctx.Done():
-			l.Abort(ticket)
+			// We need to keep track of canceled tickets as tickets are linearly
+			// ordered. If we don't do this, we cannot properly unlock the lock
+			// in the correct order.
+			l.ticketGuard.Lock()
+			defer l.ticketGuard.Unlock()
+			heap.Push(l.canceledTickets, ticket)
 			return 0
 		}
 	}
-}
-
-// Abort marks a ticket as canceled.
-func (l *TicketLock) Abort(ticket uint64) {
-	l.ticketGuard.Lock()
-	defer l.ticketGuard.Unlock()
-
-	heap.Push(l.canceledTickets, ticket)
 }
 
 // Unlock releases the lock.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"identity-metadata-server/internal/shared"
 	"net/http"
 	"strings"
@@ -57,6 +58,14 @@ func HandleGetAccessToken(c *gin.Context) {
 		// call that sets the token lifetime and see which parameter is
 		// being used.
 		tokenLifeTime := AccessTokenLifetime
+
+		// Block inflight requests for the same tokenID
+		inflightLock := knownTokens.GetTokenLock(tokenID)
+		if inflightLock.LockWithContext(c.Request.Context()) == 0 {
+			shared.HttpError(c, http.StatusTooManyRequests, errors.New("timed out while waiting for another token fetch to finish"))
+			return
+		}
+		defer inflightLock.Unlock()
 
 		trt, err := tokenProvider.GetTokenRequestToken(c.Request.Context(), srcIdentity, tokenLifeTime, scopes, additionalAudiences)
 		if trt == nil {
