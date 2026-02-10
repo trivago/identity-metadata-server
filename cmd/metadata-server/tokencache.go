@@ -16,6 +16,11 @@ type KnownToken struct {
 	expires    time.Time
 }
 
+type inflightLock struct {
+	handle   *shared.TicketLock
+	lastUsed time.Time
+}
+
 // TokenCache is a cache for previously requested tokens
 type TokenCache struct {
 	lock             *sync.Mutex
@@ -26,7 +31,7 @@ type TokenCache struct {
 	missMetric       prometheus.Counter
 	setMetric        prometheus.Counter
 
-	inflight map[TokenUID]*shared.TicketLock
+	inflight map[TokenUID]inflightLock
 }
 
 // NewTokenCache creates a new token cache with a garbage collection interval.
@@ -70,7 +75,7 @@ func NewTokenCache(gcInterval, minLifetime time.Duration) *TokenCache {
 		hitMetric:        hitMetric,
 		missMetric:       missMetric,
 		setMetric:        setMetric,
-		inflight:         make(map[TokenUID]*shared.TicketLock),
+		inflight:         make(map[TokenUID]inflightLock),
 	}
 
 	if gcInterval > 0 {
@@ -97,11 +102,23 @@ func (t *TokenCache) GetTokenLock(tokenIdentifier TokenLookup) *shared.TicketLoc
 
 	id := tokenIdentifier.ToTokenUID()
 	lock, ok := t.inflight[id]
-	if !ok {
-		lock = shared.NewTicketLock(10 * time.Millisecond)
-		t.inflight[id] = lock
+
+	if ok {
+		if time.Since(lock.lastUsed) <= t.minTokenLifetime {
+			lock.lastUsed = time.Now()
+			return lock.handle
+		}
+		// Make sure we close the lock to avoid memory leaks.
+		// The old lock will be replaced with a new one.
+		lock.handle.Close()
 	}
-	return lock
+
+	lock = inflightLock{
+		handle:   shared.NewTicketLock(5 * time.Millisecond),
+		lastUsed: time.Now(),
+	}
+	t.inflight[id] = lock
+	return lock.handle
 }
 
 // StopGC stops the garbage collection timer.
@@ -127,6 +144,19 @@ func (t *TokenCache) GC() {
 	// Delete stale tokens in separate loop to avoid invalidating the iterator
 	for _, id := range staleTokens {
 		delete(t.data, id)
+	}
+
+	// Cleanup inflight locks that are not currently held by a thread.
+	// As this is a map, we can delete keys while iterating.
+	for id, lock := range t.inflight {
+		if time.Since(lock.lastUsed) > t.minTokenLifetime {
+			if lock.handle.IsLocked() {
+				log.Warn().Msg("Timed-out inflight lock is still held by a thread, this should not happen")
+			}
+
+			lock.handle.Close()
+			delete(t.inflight, id)
+		}
 	}
 }
 

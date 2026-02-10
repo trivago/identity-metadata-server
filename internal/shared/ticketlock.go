@@ -11,7 +11,7 @@ import (
 type TicketLock struct {
 	nextTicket      uint64
 	activeTicket    uint64
-	granularity     time.Duration
+	pause           *time.Ticker
 	canceledTickets *HeapUint64
 	ticketGuard     *sync.Mutex
 }
@@ -25,10 +25,24 @@ func NewTicketLock(granularity time.Duration) *TicketLock {
 	return &TicketLock{
 		nextTicket:      1,
 		activeTicket:    1,
-		granularity:     granularity,
+		pause:           time.NewTicker(granularity),
 		canceledTickets: &HeapUint64{},
 		ticketGuard:     &sync.Mutex{},
 	}
+}
+
+// Close stops the ticket lock.
+// It is important to call this method to avoid memory leaks.
+func (l *TicketLock) Close() {
+	l.pause.Stop()
+}
+
+// IsLocked returns true if the lock is currently held by a thread.
+// Please note that this status can change right after the call to IsLocked().
+// I.e. this is not a reliable way to check if the lock is currently held by a
+// thread. It is only meant for debugging purposes.
+func (l *TicketLock) IsLocked() bool {
+	return atomic.LoadUint64(&l.activeTicket) != atomic.LoadUint64(&l.nextTicket)
 }
 
 // Lock tries to acquire a lock in a FIFO way.
@@ -49,7 +63,10 @@ func (l *TicketLock) LockWithContext(ctx context.Context) uint64 {
 		}
 
 		select {
-		case <-time.After(l.granularity):
+		// The first tick may come early, as we keep the ticker running even if
+		// no lock is acquired. This is fine, as we need this to a) check on the
+		// context and b) instruct the processor to yield the CPU during waiting.
+		case <-l.pause.C:
 			continue
 
 		case <-ctx.Done():
