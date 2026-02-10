@@ -70,8 +70,7 @@ func HandleGetAccessToken(c *gin.Context) {
 		return
 	}
 
-	// Cache miss. Acquire a lock to block inflight requests for the same tokenID
-	// Block inflight requests for the same tokenID
+	// Cache miss. Acquire a lock to block inflight requests for the same tokenID.
 	inflightLock := knownTokens.GetTokenLock(tokenID)
 	if inflightLock.LockWithContext(c.Request.Context()) == 0 {
 		c.Header("Retry-After", "5")

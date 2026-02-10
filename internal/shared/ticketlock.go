@@ -31,15 +31,15 @@ func NewTicketLock(granularity time.Duration) *TicketLock {
 	}
 }
 
-// Lock tries to aquire a lock in a FIFO way.
+// Lock tries to acquire a lock in a FIFO way.
 func (l *TicketLock) Lock() uint64 {
 	return l.LockWithContext(context.Background())
 }
 
-// LockWithContext tries to aquire a lock in a FIFO way.
+// LockWithContext tries to acquire a lock in a FIFO way.
 // It returns 0 when the lock failed to be acquired due to a context
 // cancellation or a timeout.
-// if the lock was acquired, it returns the ticket number of the lock.
+// If the lock was acquired, it returns the ticket number of the lock.
 func (l *TicketLock) LockWithContext(ctx context.Context) uint64 {
 	ticket := atomic.AddUint64(&l.nextTicket, 1) - 1
 
