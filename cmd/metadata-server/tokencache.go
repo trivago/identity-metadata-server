@@ -31,7 +31,7 @@ type TokenCache struct {
 	missMetric       prometheus.Counter
 	setMetric        prometheus.Counter
 
-	inflight map[TokenUID]inflightLock
+	inflight map[TokenUID]*inflightLock
 }
 
 // NewTokenCache creates a new token cache with a garbage collection interval.
@@ -75,7 +75,7 @@ func NewTokenCache(gcInterval, minLifetime time.Duration) *TokenCache {
 		hitMetric:        hitMetric,
 		missMetric:       missMetric,
 		setMetric:        setMetric,
-		inflight:         make(map[TokenUID]inflightLock),
+		inflight:         make(map[TokenUID]*inflightLock),
 	}
 
 	if gcInterval > 0 {
@@ -108,12 +108,9 @@ func (t *TokenCache) GetTokenLock(tokenIdentifier TokenLookup) *shared.TicketLoc
 			lock.lastUsed = time.Now()
 			return lock.handle
 		}
-		// Make sure we close the lock to avoid memory leaks.
-		// The old lock will be replaced with a new one.
-		lock.handle.Close()
 	}
 
-	lock = inflightLock{
+	lock = &inflightLock{
 		handle:   shared.NewTicketLock(5 * time.Millisecond),
 		lastUsed: time.Now(),
 	}
@@ -153,8 +150,6 @@ func (t *TokenCache) GC() {
 			if lock.handle.IsLocked() {
 				log.Warn().Msg("Timed-out inflight lock is still held by a thread, this should not happen")
 			}
-
-			lock.handle.Close()
 			delete(t.inflight, id)
 		}
 	}
