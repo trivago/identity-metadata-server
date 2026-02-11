@@ -82,5 +82,51 @@ func TestTicketLockConcurrency(t *testing.T) {
 	}
 
 	assert.True(slices.IsSorted(order), "Locks should be ordered")
+	assert.Equal(uint64(10), order[len(order)-1], "Last ticket should be equal to the number of runs")
+	assert.False(lock.IsLocked(), "Lock should not be locked after all locks have been released")
+}
+
+func TestTicketLockConcurrencyWithContext(t *testing.T) {
+	assert := assert.New(t)
+
+	lock := NewTicketLock(time.Millisecond)
+
+	wg := sync.WaitGroup{}
+	wg.Add(10)
+	done := make(chan struct{})
+	order := make([]uint64, 0, 10)
+
+	go func() {
+		for i := 0; i < 10; i++ {
+			go func() {
+				defer wg.Done()
+
+				for {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+					defer cancel()
+
+					ticket := lock.LockWithContext(ctx)
+					time.Sleep(5 * time.Millisecond)
+					if ticket != 0 {
+						order = append(order, ticket)
+						lock.Unlock()
+						return
+					}
+				}
+			}()
+		}
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		break
+	case <-time.After(10 * time.Second):
+		t.Fatal("Test should have finished within 10 seconds")
+	}
+
+	assert.True(slices.IsSorted(order), "Locks should be ordered")
+	assert.Greater(order[len(order)-1], uint64(10), "Last ticket should be greater than 10 as locks should be aborted if the context is done")
 	assert.False(lock.IsLocked(), "Lock should not be locked after all locks have been released")
 }
