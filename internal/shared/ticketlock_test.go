@@ -2,6 +2,8 @@ package shared
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -46,4 +48,39 @@ func TestTicketLock(t *testing.T) {
 	assert.NotZero(ticket6, "Lock should return a non-zero ticket after the previous lock was released")
 	assert.NotEqual(ticket3, ticket6, "Lock should return a different ticket after the previous lock was released")
 	assert.Equal(uint64(6), ticket6, "Lock should return the sixth ticket, as the fourth and fifth locks were aborted")
+}
+
+func TestTicketLockConcurrency(t *testing.T) {
+	assert := assert.New(t)
+
+	lock := NewTicketLock(time.Millisecond)
+
+	wg := sync.WaitGroup{}
+	wg.Add(10)
+	done := make(chan struct{})
+	order := make([]uint64, 0, 10)
+
+	go func() {
+		for i := 0; i < 10; i++ {
+			go func() {
+				defer wg.Done()
+				ticket := lock.Lock()
+				order = append(order, ticket)
+				time.Sleep(2 * time.Millisecond)
+				lock.Unlock()
+			}()
+		}
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		break
+	case <-time.After(time.Second):
+		t.Fatal("Test should have finished within 1 second")
+	}
+
+	assert.True(slices.IsSorted(order), "Locks should be ordered")
+	assert.False(lock.IsLocked(), "Lock should not be locked after all locks have been released")
 }
