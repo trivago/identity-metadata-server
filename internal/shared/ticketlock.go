@@ -89,7 +89,7 @@ func (l *TicketLock) Unlock() {
 
 	for {
 		ticket := atomic.AddUint64(&l.activeTicket, 1)
-		lastCanceledTicket, hasCanceledTickets := l.canceledTickets.Peek()
+		nextCanceledTicket, hasCanceledTickets := l.canceledTickets.Peek()
 
 		switch {
 		// No canceled tickets, we can return
@@ -99,7 +99,7 @@ func (l *TicketLock) Unlock() {
 		// The last canceled ticket is the same as the current ticket.
 		// We need to try again with the next ticket (which might also be
 		// canceled).
-		case lastCanceledTicket == ticket:
+		case nextCanceledTicket == ticket:
 			heap.Pop(l.canceledTickets)
 
 		// There are canceled tickets, but the current ticket is smaller than
