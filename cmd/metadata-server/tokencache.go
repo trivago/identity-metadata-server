@@ -143,10 +143,13 @@ func (t *TokenCache) GC() {
 		delete(t.data, id)
 	}
 
-	// Cleanup inflight locks that are not currently held by a thread.
+	// Cleanup inflight locks.
 	// As this is a map, we can delete keys while iterating.
 	for id, lock := range t.inflight {
 		if time.Since(lock.lastUsed) > t.minTokenLifetime {
+			// Locks that are held for longer than minTokenLifetime are a sign
+			// of a bug, like not releasing the lock. Fetching a token should
+			// always be _much_ shorter than minTokenLifetime.
 			if lock.handle.IsLocked() {
 				log.Warn().Msg("Timed-out inflight lock is still held by a thread, this should not happen")
 			}

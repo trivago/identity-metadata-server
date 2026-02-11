@@ -65,17 +65,9 @@ func (l *TicketLock) LockWithContext(ctx context.Context) uint64 {
 		}
 
 		select {
-		// The first tick may come early, as we keep the ticker running even if
-		// no lock is acquired. This is fine, as we need this to a) check on the
-		// context and b) instruct the processor to yield the CPU during waiting.
-		case _, ok := <-pause.C:
-			if !ok {
-				// The ticker has been stopped, i.e. Close() has been called.
-				// We need to return 0 to indicate that the lock was not acquired.
-				// As the lock is marked as "Closed", we don't need to keep track
-				// of canceled tickets as they will never be processed.
-				return 0
-			}
+		// We use a ticker to yield the CPU during waiting and to be able to
+		// check on the context while pausing.
+		case <-pause.C:
 			continue
 
 		case <-ctx.Done():
