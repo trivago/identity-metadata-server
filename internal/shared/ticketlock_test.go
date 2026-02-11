@@ -45,5 +45,5 @@ func TestTicketLock(t *testing.T) {
 	ticket6 := lock.Lock()
 	assert.NotZero(ticket6, "Lock should return a non-zero ticket after the previous lock was released")
 	assert.NotEqual(ticket3, ticket6, "Lock should return a different ticket after the previous lock was released")
-	assert.Equal(uint64(6), ticket6, "Lock should return the sixth ticket, as the fourth and fifth lock was aborted")
+	assert.Equal(uint64(6), ticket6, "Lock should return the sixth ticket, as the fourth and fifth locks were aborted")
 }
