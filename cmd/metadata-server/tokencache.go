@@ -16,6 +16,11 @@ type KnownToken struct {
 	expires    time.Time
 }
 
+type inflightLock struct {
+	handle   *shared.TicketLock
+	lastUsed time.Time
+}
+
 // TokenCache is a cache for previously requested tokens
 type TokenCache struct {
 	lock             *sync.Mutex
@@ -25,6 +30,8 @@ type TokenCache struct {
 	hitMetric        prometheus.Counter
 	missMetric       prometheus.Counter
 	setMetric        prometheus.Counter
+
+	inflight map[TokenUID]*inflightLock
 }
 
 // NewTokenCache creates a new token cache with a garbage collection interval.
@@ -68,6 +75,7 @@ func NewTokenCache(gcInterval, minLifetime time.Duration) *TokenCache {
 		hitMetric:        hitMetric,
 		missMetric:       missMetric,
 		setMetric:        setMetric,
+		inflight:         make(map[TokenUID]*inflightLock),
 	}
 
 	if gcInterval > 0 {
@@ -84,6 +92,30 @@ func NewTokenCache(gcInterval, minLifetime time.Duration) *TokenCache {
 	}
 
 	return cache
+}
+
+// GetTokenLock returns a ticket lock for the given token identifier.
+// The lock can be used to prevent multiple parallel requests for the same token.
+func (t *TokenCache) GetTokenLock(tokenIdentifier TokenLookup) *shared.TicketLock {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	id := tokenIdentifier.ToTokenUID()
+	lock, ok := t.inflight[id]
+
+	if ok {
+		if time.Since(lock.lastUsed) <= t.minTokenLifetime {
+			lock.lastUsed = time.Now()
+			return lock.handle
+		}
+	}
+
+	lock = &inflightLock{
+		handle:   shared.NewTicketLock(5 * time.Millisecond),
+		lastUsed: time.Now(),
+	}
+	t.inflight[id] = lock
+	return lock.handle
 }
 
 // StopGC stops the garbage collection timer.
@@ -109,6 +141,20 @@ func (t *TokenCache) GC() {
 	// Delete stale tokens in separate loop to avoid invalidating the iterator
 	for _, id := range staleTokens {
 		delete(t.data, id)
+	}
+
+	// Cleanup inflight locks.
+	// As this is a map, we can delete keys while iterating.
+	for id, lock := range t.inflight {
+		if time.Since(lock.lastUsed) > t.minTokenLifetime {
+			// Locks that are held for longer than minTokenLifetime are a sign
+			// of a bug, like not releasing the lock. Fetching a token should
+			// always be _much_ shorter than minTokenLifetime.
+			if lock.handle.IsLocked() {
+				log.Warn().Msg("Timed-out inflight lock is still held by a thread, this should not happen")
+			}
+			delete(t.inflight, id)
+		}
 	}
 }
 

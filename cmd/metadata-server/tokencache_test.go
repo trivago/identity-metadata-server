@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -221,4 +222,51 @@ func TestTokenCacheGC(t *testing.T) {
 
 	assert.Nil(cache.Get(accessTokenId1))
 	assert.Nil(cache.Get(identityTokenId1))
+}
+
+func TestTokenCacheGetTokenLock(t *testing.T) {
+	// Test the token cache
+	assert := assert.New(t)
+	lifeTime := 200 * time.Millisecond
+
+	// Create a new cache
+	cache := NewTokenCache(lifeTime/2, time.Minute)
+	defer cache.StopGC()
+
+	fakeIdentity1 := MockSourceIdentity{
+		Name:     "test",
+		BoundGSA: "test@gcp.com",
+	}
+	fakeIdentity2 := MockSourceIdentity{
+		Name:     "test2",
+		BoundGSA: "test2@gcp.com",
+	}
+
+	// Generate access tokens and locks
+	tokenId1 := NewLookup(TokenTypeAccess, fakeIdentity1)
+	tokenId2 := NewLookup(TokenTypeAccess, fakeIdentity2)
+
+	lock1 := cache.GetTokenLock(tokenId1)
+	lock2 := cache.GetTokenLock(tokenId2)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	// Normal lock
+	ticket1 := lock1.Lock()
+	defer lock1.Unlock()
+	assert.NotZero(ticket1, "lock1 should always return a non-zero ticket")
+
+	// Parallel lock on different tokens should not block
+	ticket2 := lock2.LockWithContext(ctx)
+	defer lock2.Unlock()
+
+	assert.NotZero(ticket2, "lock1 should not block lock2")
+
+	// Parallel lock on same token should block and cancel the context
+	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
+	defer cancel2()
+
+	ticket3 := lock1.LockWithContext(ctx2)
+	assert.Zero(ticket3, "lock2 should return a zero ticket if the context is done")
 }
