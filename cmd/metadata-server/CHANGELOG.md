@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.1](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.8.0...metadata-server-3.8.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* avoid parallel cache-misses on the same token ([#17](https://github.com/trivago/identity-metadata-server/issues/17)) ([a6b2491](https://github.com/trivago/identity-metadata-server/commit/a6b249116f2155a42a48bca255291d76bf4f3306))
+
 ## [3.8.0](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.7.1...metadata-server-3.8.0) (2025-11-24)
 
 
