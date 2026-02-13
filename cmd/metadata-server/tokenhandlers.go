@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"identity-metadata-server/internal/shared"
 	"net/http"
 	"strings"
@@ -48,44 +49,69 @@ func HandleGetAccessToken(c *gin.Context) {
 	}
 
 	tokenID := NewLookupWithScopeAndAudience(TokenTypeAccess, srcIdentity, scopes, additionalAudiences)
-	cachedToken := knownTokens.Get(tokenID)
-
-	if cachedToken == nil {
-		// The documentation is a bit patchy here, so we don't know if we can
-		// actually override the token lifetime through a request.
-		// TODO: Reverse-engineering is required here. We need to find a
-		// call that sets the token lifetime and see which parameter is
-		// being used.
-		tokenLifeTime := AccessTokenLifetime
-
-		trt, err := tokenProvider.GetTokenRequestToken(c.Request.Context(), srcIdentity, tokenLifeTime, scopes, additionalAudiences)
-		if trt == nil {
-			shared.HttpError(c, http.StatusInternalServerError, err)
-			return
+	returnToken := func(cachedToken *KnownToken) {
+		// The format is explained in the documentation.
+		// https://cloud.google.com/compute/docs/access/authenticate-workloads#applications
+		// The response format is identical to the one used by the STS endpoint,
+		// which might be by design, but is not documented.
+		response := shared.TokenExchangeResponse{
+			AccessToken: cachedToken.token,
+			ExpiresIn:   int(time.Until(cachedToken.expires).Seconds()),
+			TokenType:   "Bearer",
 		}
 
-		// Get the token for the given parameters.
-		accessToken, err := tokenProvider.GetAccessToken(c.Request.Context(), *trt, tokenLifeTime, scopes, gsa)
-		if accessToken == nil {
-			shared.HttpError(c, http.StatusInternalServerError, err)
-			return
-		}
-
-		cachedToken = knownTokens.StoreUntil(tokenID, accessToken.AccessToken, accessToken.ExpireTime)
+		c.Header("Metadata-Flavor", "Google")
+		c.JSON(http.StatusOK, response)
 	}
 
-	// The format is explained in the documentation.
-	// https://cloud.google.com/compute/docs/access/authenticate-workloads#applications
-	// The response format is identical to the one used by the STS endpoint,
-	// which might be by design, but is not documented.
-	response := shared.TokenExchangeResponse{
-		AccessToken: cachedToken.token,
-		ExpiresIn:   int(time.Until(cachedToken.expires).Seconds()),
-		TokenType:   "Bearer",
+	// Try to get the token from the cache
+	if cachedToken := knownTokens.Get(tokenID); cachedToken != nil {
+		returnToken(cachedToken)
+		return
 	}
 
-	c.Header("Metadata-Flavor", "Google")
-	c.JSON(http.StatusOK, response)
+	// Cache miss. Acquire a lock to block inflight requests for the same tokenID.
+	inflightLock := knownTokens.GetTokenLock(tokenID)
+	if inflightLock.LockWithContext(c.Request.Context()) == 0 {
+		c.Header("Retry-After", "5")
+		shared.HttpError(c, http.StatusTooManyRequests, errors.New("timed out while waiting for another token fetch to finish"))
+		return
+	}
+	defer inflightLock.Unlock()
+
+	// Try to get the token from the cache again. This time we might have a token
+	// in the cache, as another request might have fetched the token while we were
+	// waiting for the lock.
+	if cachedToken := knownTokens.Get(tokenID); cachedToken != nil {
+		returnToken(cachedToken)
+		return
+	}
+
+	// True cache miss. Fetch the token from the token provider.
+
+	// The documentation is a bit patchy here, so we don't know if we can
+	// actually override the token lifetime through a request.
+	// TODO: Reverse-engineering is required here. We need to find a
+	// call that sets the token lifetime and see which parameter is
+	// being used.
+	tokenLifeTime := AccessTokenLifetime
+
+	trt, err := tokenProvider.GetTokenRequestToken(c.Request.Context(), srcIdentity, tokenLifeTime, scopes, additionalAudiences)
+	if trt == nil {
+		shared.HttpError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Get the token for the given parameters.
+	accessToken, err := tokenProvider.GetAccessToken(c.Request.Context(), *trt, tokenLifeTime, scopes, gsa)
+	if accessToken == nil {
+		shared.HttpError(c, http.StatusInternalServerError, err)
+		return
+	}
+
+	// Store the token in the cache and return it
+	cachedToken := knownTokens.StoreUntil(tokenID, accessToken.AccessToken, accessToken.ExpireTime)
+	returnToken(cachedToken)
 }
 
 // HandleGetIdentityToken handles an identity token request.
