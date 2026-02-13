@@ -130,3 +130,46 @@ func TestTicketLockConcurrencyWithContext(t *testing.T) {
 	assert.Greater(order[len(order)-1], uint64(10), "Last ticket should be greater than 10 as locks should be aborted if the context is done")
 	assert.False(lock.IsLocked(), "Lock should not be locked after all locks have been released")
 }
+
+func TestTicketLockConcurrencyWithContextAndPause(t *testing.T) {
+	assert := assert.New(t)
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	done := make(chan struct{})
+
+	// Granularity must be larget than the timeout of the context to test the
+	// behavior.
+	lock := NewTicketLock(100 * time.Millisecond)
+
+	ticket1 := lock.Lock()
+	assert.NotZero(ticket1, "Lock should return a non-zero ticket")
+
+	// Unlock while the second lock is waiting for the pause.
+	// As granularity is larger than this delay the second lock is still waiting
+	// when the unlock is called.
+	time.AfterFunc(5*time.Millisecond, func() {
+		lock.Unlock()
+	})
+
+	// Make sure to have a context timeout that is between the granularity and
+	// the delay of the unlock.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	// If the test case fails, we have a deadlock here
+	go func() {
+		defer wg.Done()
+		ticket2 := lock.LockWithContext(ctx)
+		assert.NotZero(ticket2, "LockWithContext should return a non-zero ticket as the lock was acquired before the context was done")
+		lock.Unlock()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		break
+	case <-time.After(1 * time.Second):
+		t.Fatal("Test should have finished within 1 seconds")
+	}
+}

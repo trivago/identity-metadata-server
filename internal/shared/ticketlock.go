@@ -76,6 +76,15 @@ func (l *TicketLock) LockWithContext(ctx context.Context) uint64 {
 			// in the correct order.
 			l.ticketGuard.Lock()
 			defer l.ticketGuard.Unlock()
+
+			if atomic.LoadUint64(&l.activeTicket) == ticket {
+				// It might happen that we got the lock while waiting for pause
+				// and the context was done. In this case, we need to return the
+				// ticket to avoid a deadlock. This puts the task of unlocking
+				// to the caller, but this is simpler than unlocking here, as we
+				// already hold the mutex.
+				return ticket
+			}
 			heap.Push(l.canceledTickets, ticket)
 			return 0
 		}
