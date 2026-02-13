@@ -105,6 +105,11 @@ func (l *TicketLock) Unlock() {
 		case !hasCanceledTickets:
 			return
 
+		// Discard any stale canceled tickets that are less than the current
+		// ticket. This should not happen, but we handle it to be safe.
+		case nextCanceledTicket < ticket:
+			heap.Pop(l.canceledTickets)
+
 		// The last canceled ticket is the same as the current ticket.
 		// We need to try again with the next ticket (which might also be
 		// canceled).
