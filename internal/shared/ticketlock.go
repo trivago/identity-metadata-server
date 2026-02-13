@@ -20,8 +20,12 @@ type TicketLock struct {
 // The granularity is the time to wait between each lock acquisition check.
 // The granularity should be small enough to not block the main thread for too
 // long, but large enough to not waste too much time.
-// A granularity of 5-10 milliseconds is a good starting point.
+// A granularity of 1-5 milliseconds is a good starting point.
+// If the granularity is zero or less it will be set to 1 millisecond.
 func NewTicketLock(granularity time.Duration) *TicketLock {
+	if granularity <= 0 {
+		granularity = time.Millisecond
+	}
 	return &TicketLock{
 		nextTicket:      1,
 		activeTicket:    1,
