@@ -138,7 +138,7 @@ func TestTicketLockConcurrencyWithContextAndPause(t *testing.T) {
 	wg.Add(1)
 	done := make(chan struct{})
 
-	// Granularity must be larget than the timeout of the context to test the
+	// Granularity must be larger than the timeout of the context to test the
 	// behavior.
 	lock := NewTicketLock(100 * time.Millisecond)
 
