@@ -199,8 +199,9 @@ func HttpPOSTJson[T any](address string, body []byte, header map[string]string, 
 	return &result, nil
 }
 
-// newHttpClient creates an HTTP client for the given certificate or the
-// default client if no certificate is given.
+// newHttpClient creates an HTTP client using KnownRootCAs.
+// If cert is provided, the client transport is configured for HTTP/2 only.
+// If cert is nil, the client transport is configured for HTTP/1.1 only.
 func newHttpClient(cert *tls.Certificate) *http.Client {
 	tlsConfig := &tls.Config{
 		RootCAs: KnownRootCAs,
