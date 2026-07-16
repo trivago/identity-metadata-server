@@ -218,9 +218,8 @@ func newHttpClient(cert *tls.Certificate) *http.Client {
 		return &http.Client{Transport: transport}
 	}
 
-	// We use HTTP/1 transport if no certificate is provided, as
-	// some API endpoints might not support unencrypted HTTP/2.
-	transport.Protocols.SetHTTP1(true)
+	// We force HTTP/1.1 when no client certificate is provided, as some
+	// upstream endpoints might not support HTTP/2.
 	return &http.Client{Transport: transport}
 }
 
