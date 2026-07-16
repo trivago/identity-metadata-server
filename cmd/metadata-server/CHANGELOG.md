@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.9.0](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.8.1...metadata-server-3.9.0) (2026-07-16)
+
+
+### Features
+
+* **metadata-server:** add configurable HTTP/2 idle timeout (default 620s) ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+* **metadata-server:** enable h2c alongside HTTP/1.1 on cleartext listener ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+* update go to 1.26 and add HTTP2 support ([#20](https://github.com/trivago/identity-metadata-server/issues/20)) ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+
+
+### Miscellaneous
+
+* **ci:** pin GitHub Actions workflows to Go 1.26.5 ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+* **metadata-server:** add protocol tests for HTTP/1.1 and h2c prior knowledge ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+* **nix:** pin development shell to go_1_26 ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+* **shared:** replace x/net/http2 client with net/http.Protocols ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+* upgrade Go toolchain to 1.26.5 ([0f433c1](https://github.com/trivago/identity-metadata-server/commit/0f433c1372edcea0ff2b0100289b549fdafdae2e))
+
 ## [3.8.1](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.8.0...metadata-server-3.8.1) (2026-02-13)
 
 
