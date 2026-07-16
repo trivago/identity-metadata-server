@@ -19,6 +19,7 @@ func newProtocolTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
+	initConfigDefaults()
 	router := gin.New()
 	initGinEndpoints(router)
 
