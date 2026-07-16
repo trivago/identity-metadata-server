@@ -127,7 +127,7 @@ func initConfigDefaults() {
 	viper.SetDefault("providerName", "production")
 	viper.SetDefault("mode", "kubernetes")
 	viper.SetDefault("maxRequestDuration", 5*time.Second)
-	// The idle timeout for HTTP/2 connections.
+	// Idle timeout for keep-alive connections (HTTP/1.1 and HTTP/2).
 	viper.SetDefault("server.idleTimeout", "620s")
 	viper.SetDefault("cache.serviceAccountTTL", 2*time.Minute)
 	viper.SetDefault("cache.tokenCleanupInterval", time.Hour)
