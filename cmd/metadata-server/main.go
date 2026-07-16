@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"strings"
 	"time"
 
@@ -126,6 +127,8 @@ func initConfigDefaults() {
 	viper.SetDefault("providerName", "production")
 	viper.SetDefault("mode", "kubernetes")
 	viper.SetDefault("maxRequestDuration", 5*time.Second)
+	// The idle timeout for HTTP/2 connections.
+	viper.SetDefault("server.idleTimeout", "620s")
 	viper.SetDefault("cache.serviceAccountTTL", 2*time.Minute)
 	viper.SetDefault("cache.tokenCleanupInterval", time.Hour)
 	viper.SetDefault("cache.tokenMinLifetime", 1*time.Minute)
@@ -139,6 +142,14 @@ func initConfigDefaults() {
 	viper.SetDefault("host.clientCertRefresh", time.Hour*24)
 	viper.SetDefault("token.lifetime.access", 10*time.Minute)
 	viper.SetDefault("token.lifetime.identity", 10*time.Minute)
+}
+
+// configureHTTPServer enables HTTP/1.1 and unencrypted HTTP/2 on the server.
+func configureHTTPServer(srv *http.Server, idleTimeout time.Duration) {
+	srv.IdleTimeout = idleTimeout
+	srv.Protocols = new(http.Protocols)
+	srv.Protocols.SetHTTP1(true)
+	srv.Protocols.SetUnencryptedHTTP2(true)
 }
 
 func main() {
@@ -160,6 +171,8 @@ func main() {
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create server")
 	}
+
+	configureHTTPServer(srv, viper.GetDuration("server.idleTimeout"))
 
 	mode := viper.GetString("mode")
 	workloadIdentityAudience := shared.GetWorkloadIdentityAudience(

@@ -15,7 +15,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
-	"golang.org/x/net/http2"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -200,29 +199,28 @@ func HttpPOSTJson[T any](address string, body []byte, header map[string]string, 
 	return &result, nil
 }
 
-// newHttpClient creates a new http2 client with the given certificate or
-// the default client if no certificate is given.
+// newHttpClient creates an HTTP client for the given certificate or the
+// default client if no certificate is given.
 func newHttpClient(cert *tls.Certificate) *http.Client {
 	tlsConfig := &tls.Config{
 		RootCAs: KnownRootCAs,
 	}
 
+	transport := &http.Transport{
+		TLSClientConfig: tlsConfig,
+	}
+	transport.Protocols = new(http.Protocols)
+
 	if cert != nil {
 		tlsConfig.Certificates = []tls.Certificate{*cert}
-		return &http.Client{
-			Transport: &http2.Transport{
-				TLSClientConfig: tlsConfig,
-			},
-		}
+		transport.Protocols.SetHTTP2(true)
+		return &http.Client{Transport: transport}
 	}
 
-	// We use HTTP1 transport if no certificate is provided, as
-	// some API endpoints might not support unencrypted HTTP2.
-	return &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
-		},
-	}
+	// We use HTTP/1 transport if no certificate is provided, as
+	// some API endpoints might not support unencrypted HTTP/2.
+	transport.Protocols.SetHTTP1(true)
+	return &http.Client{Transport: transport}
 }
 
 // DoWithRetry performs the given HTTP request with retries for specific status codes.

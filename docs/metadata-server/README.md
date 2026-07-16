@@ -27,6 +27,10 @@ providerName: "production"
 # Can be "kubernetes" or "host"
 mode: "kubernetes"
 
+# Idle timeout for HTTP/2 connections
+server:
+  idleTimeout: '620s'
+
 token:
   lifetime:
     # Lifetime of access tokens
