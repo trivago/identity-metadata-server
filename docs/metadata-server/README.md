@@ -48,8 +48,11 @@ cache:
   # This is only required for tokens that are not frequently fetched.
   tokenCleanupInterval: '1h'
 
-  # The minimum lifetime of a token before it is refreshed
-  tokenMinLifetime: '1m'
+  # The minimum lifetime of a token before it is refreshed.
+  # Must stay above 225s: Go GCP clients refresh that early and reject any
+  # token with less remaining, which surfaces as authentication failures
+  # (for image pulls: an anonymous pull and a 403 from Artifact Registry).
+  tokenMinLifetime: '5m'
 
 # This section is only used when "mode" is set to "kubernetes"
 kubernetes:

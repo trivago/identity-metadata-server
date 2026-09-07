@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -269,4 +270,19 @@ func TestTokenCacheGetTokenLock(t *testing.T) {
 
 	ticket3 := lock1.LockWithContext(ctx2)
 	assert.Zero(ticket3, "lock2 should return a zero ticket if the context is done")
+}
+
+func TestDefaultTokenMinLifetimeExceedsGoClientEarlyExpiry(t *testing.T) {
+	// golang.org/x/oauth2/google.ComputeTokenSource refreshes 225s early and
+	// reports any token below that as expired without ever calling GCP. A
+	// default under this threshold makes every Go GCP client fail for the tail
+	// of each cached token's life.
+	const goClientEarlyExpiry = 225 * time.Second
+
+	assert := assert.New(t)
+
+	viper.Reset()
+	initConfigDefaults()
+
+	assert.Greater(viper.GetDuration("cache.tokenMinLifetime"), goClientEarlyExpiry)
 }
