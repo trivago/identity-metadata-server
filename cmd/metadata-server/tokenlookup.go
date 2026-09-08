@@ -3,9 +3,8 @@ package main
 import (
 	"fmt"
 	"identity-metadata-server/internal/tokenprovider"
+	"slices"
 	"strings"
-
-	"k8s.io/utils/strings/slices"
 )
 
 type TokenLookup struct {
