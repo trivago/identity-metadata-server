@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.9.1](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.9.0...metadata-server-3.9.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* serve cached tokens with at least 5m of lifetime left ([#27](https://github.com/trivago/identity-metadata-server/issues/27)) ([6b225b1](https://github.com/trivago/identity-metadata-server/commit/6b225b18bac34b9111eae8ef7f0bf563be337c6a))
+
 ## [3.9.0](https://github.com/trivago/identity-metadata-server/compare/metadata-server-3.8.1...metadata-server-3.9.0) (2026-07-16)
 
 
