@@ -131,7 +131,13 @@ func initConfigDefaults() {
 	viper.SetDefault("server.idleTimeout", "620s")
 	viper.SetDefault("cache.serviceAccountTTL", 2*time.Minute)
 	viper.SetDefault("cache.tokenCleanupInterval", time.Hour)
-	viper.SetDefault("cache.tokenMinLifetime", 1*time.Minute)
+	// Go GCP clients (golang.org/x/oauth2/google.ComputeTokenSource and
+	// cloud.google.com/go/auth) refresh 225s early and treat any token with
+	// less than that remaining as already expired. Serving a shorter-lived
+	// cached token makes those clients fail outright. The real GCE metadata
+	// server never hands out a token with less than ~4m left for the same
+	// reason, so stay above the threshold with margin.
+	viper.SetDefault("cache.tokenMinLifetime", 5*time.Minute)
 	viper.SetDefault("kubernetes.kubeletHost", "https://127.0.0.1:10250")
 	viper.SetDefault("kubernetes.kubeletCaPath", "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 	viper.SetDefault("host.identityServer", "https://identity-server:443")
