@@ -48,7 +48,7 @@ jobs:
       pull-requests: 'write'
 
     steps:
-      - uses: 'fgrosse/go-coverage-report@8c1d1a09864211d258937b1b1a5b849f7e4f2682' # ratchet:fgrosse/go-coverage-report@v1.2.0
+      - uses: 'fgrosse/go-coverage-report@e432de98ee94a276e8f666d25bfd76347665f75b' # ratchet:fgrosse/go-coverage-report@v1.3.1
         env:
           GITHUB_BASELINE_WORKFLOW: ${{ github.workflow }}
         with:
